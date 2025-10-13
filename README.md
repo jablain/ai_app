@@ -23,6 +23,23 @@ Note: runtime/ directories contain user data (profiles, logs, venvs) and are NOT
 - GTK4 + libadwaita (for GUI)
 - Playwright
 
+### Prerequisites
+
+    **System packages (Ubuntu/Pop!_OS/Debian):**
+
+    sudo apt update
+    sudo apt install -y \
+      python3 python3-pip python3-venv \
+      python3-gi gir1.2-gtk-4.0 gir1.2-adw-1
+
+    **Other distributions:**
+    - Arch: `python python-pip python-gobject gtk4 libadwaita`
+    - Fedora: `python3 python3-pip python3-gobject gtk4 libadwaita`
+
+    **Verify GTK4:**
+
+    python3 -c "import gi; gi.require_version('Gtk', '4.0'); gi.require_version('Adw', '1'); from gi.repository import Gtk, Adw; print('✓ GTK4 ready')"
+    
 ### Installation
 
     # 1. Clone repository
@@ -57,6 +74,13 @@ Note: runtime/ directories contain user data (profiles, logs, venvs) and are NOT
 
     # Or use CLI
     ai-cli-bridge send claude "your prompt"
+
+    **Important:** On first launch:
+    1. CDP browser will open
+    2. Navigate to https://claude.ai
+    3. Log in manually (one time only)
+    4. Close browser properly (Ctrl+Q or click X)
+    5. Future launches will remember your login
 
 ## Features
 
