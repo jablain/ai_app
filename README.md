@@ -36,6 +36,17 @@ Note: runtime/ directories contain user data (profiles, logs, venvs) and are NOT
     # 3. Move scripts to shared folder
     mv *.sh shared/scripts/
 
+    # 4. Download Playwright browser
+    source shared/scripts/activate.sh
+    playwright install chromium
+
+    # 5. Install desktop entry and icon
+    cp ai-chat-ui/desktop/ai-chat-ui.desktop ~/.local/share/applications/
+    mkdir -p ~/.local/share/icons/hicolor/scalable/apps/
+    cp ai-chat-ui/desktop/ai-chat-ui.svg ~/.local/share/icons/hicolor/scalable/apps/
+    update-desktop-database ~/.local/share/applications
+    gtk-update-icon-cache -f -t ~/.local/share/icons/hicolor
+
 ### First Use
 
     # Activate environment
