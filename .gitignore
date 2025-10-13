@@ -1,0 +1,57 @@
+# Runtime directories - NEVER commit these (contain user data)
+*/runtime/
+shared/runtime/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# IDE / Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Logs
+*.log
+logs/
+
+# Backups
+*.bak
+*.backup
+*_backup_*/
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# Sensitive data
+*.pem
+*.key
+secrets.json
+credentials.json
+
+# Test files
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
