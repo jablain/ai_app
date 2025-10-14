@@ -1,9 +1,12 @@
 """Abstract base class for AI browser automation."""
 
+import asyncio
+import time
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple, Dict, Any, ClassVar
-from playwright.async_api import Page
+from typing import Optional, Tuple, Dict, Any
+from datetime import datetime, timezone
 
+from playwright.async_api import async_playwright, Page, TimeoutError as PWTimeout
 
 class BaseAI(ABC):
     """
@@ -45,13 +48,13 @@ class BaseAI(ABC):
         self._debug_enabled = False
         self._cdp_url: Optional[str] = None
         self._cdp_source: Optional[str] = None
-    
-    
+        self._turn_count: int = 0
+        self._last_page_url: Optional[str] = None
+
     # =========================
-    # Public interface (must be implemented by subclasses)
+    # Public interface (Template Method)
     # =========================
     
-    @abstractmethod
     async def send_prompt(
         self,
         message: str,
@@ -59,23 +62,70 @@ class BaseAI(ABC):
         timeout_s: int = 120
     ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
         """
-        Send a prompt to the AI and optionally wait for response.
-        
-        Args:
-            message: The prompt text to send
-            wait_for_response: Whether to wait for and extract the response
-            timeout_s: Maximum time to wait for response
+        Public method to send a prompt using the Template Method Pattern.
+        Handles connection, page selection, and cleanup, then calls the
+        subclass-specific implementation.
+        """
+        ws_url, ws_source = await self._discover_cdp_url()
+        if not ws_url:
+            self._debug(f"CDP discovery failed: {ws_source}")
+            return False, None, None, {"error": "no_cdp", "source": ws_source}
             
-        Returns:
-            Tuple of (success, snippet, full_markdown, metadata)
-            - success: True if operation succeeded
-            - snippet: Short preview of response (~280 chars)
-            - full_markdown: Complete response in markdown format
-            - metadata: Dict with timing, page_url, etc.
+        self._debug(f"CDP connected via {ws_source}: {ws_url}")
+        
+        pw = await async_playwright().start()
+        remote = None
+        
+        try:
+            remote = await pw.chromium.connect_over_cdp(ws_url)
+            page = await self._pick_page(remote, self.get_base_url())
+            
+            if not page:
+                self._debug("No suitable page found")
+                return False, None, None, {"error": "no_page"}
+                
+            self._last_page_url = page.url
+            self._debug(f"Operating on page: {page.url}")
+            
+            # Call the subclass-specific implementation
+            success, snippet, markdown, metadata = await self._execute_interaction(
+                page, message, wait_for_response, timeout_s
+            )
+            
+            # --- CENTRAlIZED LOGIC ---
+            if success:
+                self._turn_count += 1
+                self._debug(f"Turn count incremented to: {self._turn_count}")
+
+            # Add common metadata
+            if metadata:
+                 metadata["ws_source"] = ws_source
+                 metadata["timestamp"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+            return success, snippet, markdown, metadata
+            
+        finally:
+            if remote: await remote.close()
+            await pw.stop()
+
+    # =========================
+    # Abstract methods (to be implemented by subclasses)
+    # =========================
+
+    @abstractmethod
+    async def _execute_interaction(
+        self,
+        page: Page,
+        message: str,
+        wait_for_response: bool,
+        timeout_s: int
+    ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
+        """
+        Subclass-specific implementation for the core AI interaction.
+        This method is called by the public send_prompt method.
         """
         pass
-    
-    
+        
     @abstractmethod
     async def list_messages(self) -> list[Dict[str, Any]]:
         """
@@ -120,11 +170,19 @@ class BaseAI(ABC):
         """
         pass
     
-    
     # =========================
     # Public interface (common implementation)
     # =========================
     
+    def get_turn_count(self) -> int:
+        """Get the current turn count for the session."""
+        return self._turn_count
+
+    def reset_turn_count(self) -> None:
+        """Reset the session turn count to 0."""
+        self._debug("Turn count reset to 0.")
+        self._turn_count = 0
+        
     def set_debug(self, enabled: bool) -> None:
         """Enable or disable debug output."""
         self._debug_enabled = enabled
@@ -151,6 +209,10 @@ class BaseAI(ABC):
             return int(self._config.get("cdp", {}).get("port", 9222))
         except Exception:
             return 9222
+            
+    def get_base_url(self) -> str:
+        """Helper to get base_url from config."""
+        return self._config.get("base_url", "")
     
     
     # =========================

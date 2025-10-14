@@ -3,9 +3,8 @@
 import asyncio
 import time
 from typing import Optional, Tuple, Dict, Any
-from datetime import datetime, timezone
 
-from playwright.async_api import async_playwright, Page, TimeoutError as PWTimeout
+from playwright.async_api import Page, TimeoutError as PWTimeout
 from .base import BaseAI
 from .factory import AIFactory
 
@@ -33,7 +32,6 @@ class GeminiAI(BaseAI):
     CDP_PORT = 9223 # Match your browser launch script
     
     # Timing
-    TYPING_DELAY_MS = 30
     RESPONSE_WAIT_S = 10.0
     COMPLETION_CHECK_INTERVAL_S = 0.2
     
@@ -63,89 +61,60 @@ class GeminiAI(BaseAI):
     def __init__(self, config: Dict[str, Any]):
         """Initialize Gemini AI instance."""
         super().__init__(config)
-        self._session_start_time: Optional[float] = None
         self._message_count: int = 0
-        self._last_page_url: Optional[str] = None
 
     # =========================
-    # Public interface implementation
+    # Abstract method implementations
     # =========================
     
-    async def send_prompt(
+    async def _execute_interaction(
         self,
+        page: Page,
         message: str,
-        wait_for_response: bool = True,
-        timeout_s: int = 120
+        wait_for_response: bool,
+        timeout_s: int
     ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
-        """Send a prompt to Gemini and optionally wait for response."""
+        """Gemini-specific implementation of the core interaction logic."""
         
-        ws_url, ws_source = await self._discover_cdp_url()
+        if not await self._ensure_chat_ready(page):
+            self._debug("Chat interface not ready")
+            return False, None, None, {"error": "chat_not_ready"}
         
-        if not ws_url:
-            self._debug(f"CDP discovery failed: {ws_source}")
-            return False, None, None, {"error": "no_cdp", "source": ws_source}
-            
-        self._debug(f"CDP connected via {ws_source}: {ws_url}")
-        
-        pw = await async_playwright().start()
-        remote = None
+        baseline_count = await self._get_response_count(page)
+        self._debug(f"Baseline response count: {baseline_count}")
         
         try:
-            remote = await pw.chromium.connect_over_cdp(ws_url)
-            page = await self._pick_page(remote, self.BASE_URL)
-            
-            if not page:
-                self._debug("No suitable page found")
-                return False, None, None, {"error": "no_page"}
-                
-            self._last_page_url = page.url
-            self._debug(f"Operating on page: {page.url}")
-            
-            if not await self._ensure_chat_ready(page):
-                self._debug("Chat interface not ready")
-                return False, None, None, {"error": "chat_not_ready"}
-            
-            baseline_count = await self._get_response_count(page)
-            self._debug(f"Baseline response count: {baseline_count}")
-            
-            try:
-                await page.fill(self.INPUT_BOX, message, timeout=5000)
-                await page.keyboard.press("Enter")
-                self._debug("Message sent via Enter key")
-            except Exception as e:
-                self._debug(f"Failed to send prompt: {e}")
-                return False, None, None, {"error": "send_failed"}
+            await page.fill(self.INPUT_BOX, message, timeout=5000)
+            await page.keyboard.press("Enter")
+            self._debug("Message sent via Enter key")
+        except Exception as e:
+            self._debug(f"Failed to send prompt: {e}")
+            return False, None, None, {"error": "send_failed"}
 
-            snippet, markdown, elapsed_ms = None, None, None
+        snippet, markdown, elapsed_ms = None, None, None
+        
+        if wait_for_response:
+            t0 = time.time()
             
-            if wait_for_response:
-                t0 = time.time()
-                
-                self._debug("Waiting for response completion...")
-                completed = await self._wait_for_response_complete(page, timeout_s)
-                self._debug(f"Response complete signal: {completed}")
-                
-                if completed:
-                    snippet, markdown = await self._extract_response(page, baseline_count)
-                    self._debug(f"Extracted - snippet: {len(snippet) if snippet else 0} chars, markdown: {len(markdown) if markdown else 0} chars")
-                
-                elapsed_ms = int((time.time() - t0) * 1000)
+            self._debug("Waiting for response completion...")
+            completed = await self._wait_for_response_complete(page, timeout_s)
+            self._debug(f"Response complete signal: {completed}")
             
-            self._message_count += 1
+            if completed:
+                snippet, markdown = await self._extract_response(page, baseline_count)
+                self._debug(f"Extracted - snippet: {len(snippet) if snippet else 0} chars...")
             
-            metadata = {
-                "page_url": page.url,
-                "elapsed_ms": elapsed_ms,
-                "waited": wait_for_response,
-                "ws_source": ws_source,
-                "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-            }
-            
-            return True, snippet, markdown, metadata
-            
-        finally:
-            if remote: await remote.close()
-            await pw.stop()
+            elapsed_ms = int((time.time() - t0) * 1000)
+        
+        self._message_count += 1
+        
+        metadata = {
+            "page_url": page.url,
+            "elapsed_ms": elapsed_ms,
+            "waited": wait_for_response,
+        }
+        
+        return True, snippet, markdown, metadata
 
     async def list_messages(self) -> list[Dict[str, Any]]:
         raise NotImplementedError("list_messages not yet implemented for Gemini")
@@ -154,6 +123,7 @@ class GeminiAI(BaseAI):
         raise NotImplementedError("extract_message not yet implemented for Gemini")
 
     async def get_status(self) -> Dict[str, Any]:
+        """Get current session status for Gemini."""
         if self._cdp_url is None:
             await self._discover_cdp_url()
     
@@ -166,12 +136,13 @@ class GeminiAI(BaseAI):
             "cdp_url": ws_url,
             "last_page_url": self._last_page_url,
             "message_count": self._message_count,
+            "turn_count": self.get_turn_count(),
             "debug_enabled": self.get_debug(),
         }
         return status
         
     # =========================
-    # Gemini-specific implementation
+    # Gemini-specific protected methods
     # =========================
     
     async def _ensure_chat_ready(self, page: Page) -> bool:
@@ -210,24 +181,20 @@ class GeminiAI(BaseAI):
             self._debug("Stop button appeared. Response generation has started.")
             
             # Phase 2: Poll from Python until the stop button is gone.
-            # This avoids injecting JavaScript and respects the page's security policy.
             self._debug("Polling until stop button disappears...")
             deadline = time.time() + timeout_s
             while time.time() < deadline:
-                # locator(...).count() is a safe, non-evaluating check.
                 count = await page.locator(self.STOP_BUTTON).count()
                 if count == 0:
                     self._debug("Stop button is gone. Response is complete.")
                     return True
-                await asyncio.sleep(0.2) # Wait a moment before checking again
+                await asyncio.sleep(0.2)
             
             self._debug("Polling timed out. Stop button never disappeared.")
-            return False # Explicitly fail on timeout
+            return False
 
         except Exception as e:
             self._debug(f"An error occurred while waiting for completion: {e}")
-            # This can happen if the response is instant and the button never appears.
-            # In this case, we can cautiously assume it's complete.
             return True
 
     async def _extract_response(
