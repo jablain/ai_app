@@ -11,7 +11,6 @@ gi.require_version('Adw', '1')
 from gi.repository import Gtk, Adw, GLib
 from .window import ChatWindow
 
-
 class AIChatApplication(Adw.Application):
     """Main GTK application"""
     
@@ -28,12 +27,10 @@ class AIChatApplication(Adw.Application):
             self.window = ChatWindow(application=self)
         self.window.present()
 
-
 def main():
     """Application entry point"""
     app = AIChatApplication()
     return app.run(sys.argv)
-
 
 if __name__ == '__main__':
     sys.exit(main())

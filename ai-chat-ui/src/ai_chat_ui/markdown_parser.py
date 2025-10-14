@@ -4,7 +4,6 @@ Supports: bold, italic, code, headers, code blocks, lists
 """
 import re
 
-
 class MarkdownParser:
     """Parse markdown and apply formatting to TextBuffer"""
     

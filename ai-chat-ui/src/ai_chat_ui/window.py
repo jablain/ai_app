@@ -19,7 +19,6 @@ except ImportError:
 
 from .response_display import ResponseDisplay
 
-
 class ChatWindow(Adw.ApplicationWindow):
     """Main application window"""
     

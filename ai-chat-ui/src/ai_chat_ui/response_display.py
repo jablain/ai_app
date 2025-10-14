@@ -4,7 +4,6 @@ Response display widget with markdown formatting support
 from gi.repository import Gtk, Gdk, Pango
 from .markdown_parser import MarkdownParser
 
-
 class ResponseDisplay:
     """TextView with markdown formatting and copy button"""
     
