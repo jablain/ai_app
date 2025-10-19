@@ -1,0 +1,1909 @@
+=================================================================
+AI-CLI-BRIDGE PROJECT OVERVIEW
+=================================================================
+
+
+=================================================================
+FILE: src/ai_cli_bridge/daemon/config.py
+=================================================================
+"""
+Configuration management for the AI-CLI-Bridge Daemon.
+
+This module defines the paths for runtime files (PID, logs, config)
+and handles loading the daemon's configuration from a TOML file.
+"""
+
+import os
+import pathlib
+import tomli
+from typing import Dict, Any
+
+# Define the root path for all runtime data to keep the project self-contained.
+# Resolves the home directory ('~') and ensures the path is absolute.
+PROJECT_ROOT = pathlib.Path(os.path.expanduser("~/dev/ai_app/ai-cli-bridge/")).resolve()
+RUNTIME_DIR = PROJECT_ROOT / "runtime"
+
+# Define specific paths for daemon management files.
+CONFIG_DIR = RUNTIME_DIR / "config"
+LOG_DIR = RUNTIME_DIR / "logs"
+PID_FILE = RUNTIME_DIR / "daemon.pid"
+LOG_FILE = LOG_DIR / "daemon.log"
+CONFIG_FILE = CONFIG_DIR / "daemon_config.toml"
+
+# --- Default Configuration ---
+# These values will be used if they are not specified in the TOML file.
+DEFAULT_CONFIG = {
+    "daemon": {
+        "host": "127.0.0.1",
+        "port": 8000,
+        "log_level": "INFO",
+    },
+    "features": {
+        "token_align_frequency": 5000,
+    }
+}
+
+def load_config() -> Dict[str, Any]:
+    """
+    Loads the daemon configuration from the TOML file.
+
+    If the config file does not exist, it creates a default one.
+    It merges the loaded configuration with the defaults to ensure
+    all necessary keys are present.
+
+    Returns:
+        A dictionary containing the loaded and merged configuration.
+    """
+    # Ensure the config directory exists.
+    CONFIG_DIR.mkdir(parents=True, exist_ok=True)
+
+    config = DEFAULT_CONFIG.copy()
+
+    if not CONFIG_FILE.exists():
+        print(f"Config file not found. Creating default at: {CONFIG_FILE}")
+        # If you're using a version of Python that supports it, you might use
+        # `tomli_w` here to write the TOML file. For now, we'll just proceed
+        # with the defaults. A more robust implementation would write them.
+        return config
+
+    try:
+        with open(CONFIG_FILE, "rb") as f:
+            loaded_config = tomli.load(f)
+            # Deep merge the loaded config into the default config
+            for section, values in loaded_config.items():
+                if section in config:
+                    config[section].update(values)
+                else:
+                    config[section] = values
+    except tomli.TOMLDecodeError as e:
+        print(f"Error decoding TOML file at {CONFIG_FILE}: {e}")
+        print("Using default configuration.")
+    
+    return config
+
+# --- Create necessary directories on import ---
+def initialize_runtime_dirs():
+    """
+    Creates all necessary runtime directories for the daemon.
+    """
+    RUNTIME_DIR.mkdir(exist_ok=True)
+    CONFIG_DIR.mkdir(exist_ok=True)
+    LOG_DIR.mkdir(exist_ok=True)
+
+initialize_runtime_dirs()
+
+
+=================================================================
+FILE: src/ai_cli_bridge/daemon/main.py
+=================================================================
+"""
+Main entry point for the AI-CLI-Bridge Daemon.
+
+This module sets up and runs a FastAPI server to manage long-lived AI object
+instances and handle interactions with the browser. It serves as the central
+hub for both the CLI and GUI clients.
+"""
+
+import asyncio
+from fastapi import FastAPI, HTTPException
+from contextlib import asynccontextmanager
+from typing import Dict, Any
+
+from ..ai import AIFactory
+from ..ai.base import BaseAI
+from . import config
+
+# --- Daemon State ---
+daemon_state: Dict[str, Any] = {
+    "ai_instances": {},
+    "locks": {},
+    "browser_context": None,
+    "playwright": None,
+}
+
+# --- FastAPI Lifespan Management ---
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Handles startup and shutdown events for the FastAPI application.
+    This is where we launch the browser and create the persistent AI objects.
+    """
+    print("🚀 Daemon starting up...")
+    app_config = config.load_config()
+    daemon_state["config"] = app_config
+    
+    # 1. Start Playwright
+    pw_manager = daemon_state["playwright"] = AIFactory.get_playwright_manager()
+    await pw_manager.start()
+    pw = pw_manager.playwright
+
+    # 2. Launch the persistent CDP browser
+    try:
+        print("    - Launching persistent CDP browser...")
+        profile_path = config.PROJECT_ROOT / "runtime" / "profiles" / "main"
+        profile_path.mkdir(parents=True, exist_ok=True)
+        
+        context = await pw.chromium.launch_persistent_context(
+            user_data_dir=str(profile_path),
+            args=["--remote-debugging-port=9223"],
+            headless=False,
+        )
+        daemon_state["browser_context"] = context
+        print(f"    - Browser launched with profile: {profile_path}")
+    except Exception as e:
+        print(f"❌ CRITICAL: Failed to launch browser: {e}")
+        if daemon_state.get("playwright"):
+            await daemon_state["playwright"].stop()
+        raise RuntimeError("Could not launch browser, daemon cannot start.") from e
+
+    # 3. Instantiate all available AI objects
+    print("    - Initializing AI instances...")
+    # Dynamically import all AI modules to ensure they are registered
+    AIFactory.import_all_ais()
+    for ai_name in AIFactory.list_available():
+        try:
+            ai_class = AIFactory.get_class(ai_name)
+            ai_config = ai_class.get_default_config()
+            instance = AIFactory.create(ai_name, config=ai_config)
+            
+            daemon_state["ai_instances"][ai_name] = instance
+            daemon_state["locks"][ai_name] = asyncio.Lock()
+            print(f"      - '{ai_name}' instance created.")
+        except Exception as e:
+            print(f"      - ⚠️ Failed to create instance for '{ai_name}': {e}")
+
+    # 4. Force a "New Chat" on startup for each AI
+    print("    - Ensuring clean start state for all AIs...")
+    for ai_name, instance in daemon_state["ai_instances"].items():
+        async with daemon_state["locks"][ai_name]:
+            try:
+                page = await instance._pick_page(daemon_state["browser_context"], instance.get_base_url())
+                if not page:
+                    page = await daemon_state["browser_context"].new_page()
+                    await page.goto(instance.get_base_url())
+                
+                await instance.start_new_session(page)
+                print(f"      - '{ai_name}' started in a new session.")
+
+            except Exception as e:
+                print(f"      - ⚠️ Failed to start new session for '{ai_name}': {e}")
+
+    print("✅ Daemon startup complete. Ready for requests.")
+    yield
+    # --- Shutdown Logic ---
+    print("🔌 Daemon shutting down...")
+    
+    if daemon_state.get("browser_context"):
+        print("    - Closing browser context...")
+        await daemon_state["browser_context"].close()
+    
+    if daemon_state.get("playwright"):
+        print("    - Stopping Playwright...")
+        await daemon_state["playwright"].stop()
+
+    print("🛑 Daemon shutdown complete.")
+
+
+# --- FastAPI App Initialization ---
+app = FastAPI(lifespan=lifespan)
+
+
+# --- API Endpoints ---
+
+@app.get("/status")
+async def get_status():
+    """Returns the high-level status of all managed AI instances."""
+    # TODO: Implement the logic to call get_status() on each AI instance.
+    return {"message": "Status endpoint not yet implemented."}
+
+@app.post("/send")
+async def send_prompt_to_ai(request: dict):
+    """Receives a prompt and routes it to the appropriate AI instance."""
+    target = request.get("target")
+    prompt = request.get("prompt")
+    
+    if not target or not prompt:
+        raise HTTPException(status_code=400, detail="Request must include 'target' and 'prompt'")
+        
+    ai_instance = daemon_state["ai_instances"].get(target)
+    if not ai_instance:
+        raise HTTPException(status_code=404, detail=f"AI target '{target}' not found.")
+
+    # Acquire the lock for this specific AI to prevent concurrent access
+    lock = daemon_state["locks"].get(target)
+    if not lock:
+        raise HTTPException(status_code=500, detail=f"Concurrency lock for '{target}' not found.")
+
+    async with lock:
+        try:
+            # Call the send_prompt method on the persistent AI object
+            success, snippet, markdown, metadata = await ai_instance.send_prompt(
+                message=prompt,
+                wait_for_response=request.get("wait_for_response", True),
+                timeout_s=request.get("timeout_s", 120),
+            )
+            return {
+                "success": success,
+                "snippet": snippet,
+                "markdown": markdown,
+                "metadata": metadata,
+            }
+        except Exception as e:
+            # Catch any unexpected errors during the interaction
+            raise HTTPException(status_code=500, detail=f"An error occurred: {str(e)}")
+
+
+@app.get("/session/list/{ai_name}")
+async def list_sessions(ai_name: str):
+    return {"message": f"Session list for '{ai_name}' not yet implemented."}
+
+@app.post("/session/switch/{ai_name}")
+async def switch_session(ai_name: str, request: dict):
+    return {"message": f"Session switch for '{ai_name}' not yet implemented."}
+
+@app.post("/session/new/{ai_name}")
+async def new_session(ai_name: str):
+    return {"message": f"New session for '{ai_name}' not yet implemented."}
+
+
+def run_daemon():
+    """
+    The main function to run the Uvicorn server.
+    This will be called by our `daemon start` command.
+    """
+    import uvicorn
+    
+    app_config = config.load_config()
+    daemon_config = app_config.get("daemon", {})
+    
+    uvicorn.run(
+        "ai_cli_bridge.daemon.main:app",
+        host=daemon_config.get("host", "127.0.0.1"),
+        port=daemon_config.get("port", 8000),
+        log_level=daemon_config.get("log_level", "info").lower(),
+    )
+
+if __name__ == "__main__":
+    run_daemon()
+
+
+
+
+=================================================================
+FILE: src/ai_cli_bridge/daemon/process_manager.py
+=================================================================
+"""
+Handles the lifecycle of the AI-CLI-Bridge daemon as a background process.
+
+This module provides functions to start, stop, and check the status of the
+daemon using a PID file to track the running process. This abstracts away
+the OS-specific details of process management.
+"""
+
+import os
+import signal
+import subprocess
+import sys
+import time
+from . import config
+
+def is_running() -> bool:
+    """
+    Check if the daemon process is currently running.
+
+    Returns:
+        True if the PID file exists and a process with that PID is running,
+        False otherwise.
+    """
+    if not config.PID_FILE.exists():
+        return False
+    
+    try:
+        pid = int(config.PID_FILE.read_text())
+        # Sending signal 0 to a PID on Unix-like systems checks if the process
+        # exists without actually sending a signal.
+        os.kill(pid, 0)
+    except (IOError, ValueError, OSError):
+        # PID file might be corrupt, or process might not exist.
+        return False
+    else:
+        return True
+
+def start_daemon_process() -> bool:
+    """
+    Starts the daemon as a detached background process.
+
+    It will check if the daemon is already running. If not, it spawns a new
+    Python process to run the daemon's main module, redirects its output to
+    a log file, and stores its PID.
+
+    Returns:
+        True if the daemon was started successfully, False otherwise.
+    """
+    if is_running():
+        pid = config.PID_FILE.read_text()
+        print(f"Daemon is already running with PID {pid}.")
+        return False
+
+    print(f"Starting daemon in the background...")
+    print(f"Logs will be written to: {config.LOG_FILE}")
+
+    # Ensure the log directory exists
+    config.LOG_DIR.mkdir(parents=True, exist_ok=True)
+
+    try:
+        # Open the log file for stdout and stderr redirection
+        log_file = open(config.LOG_FILE, 'a')
+        
+        # Command to run the daemon module
+        command = [sys.executable, "-m", "ai_cli_bridge.daemon.main"]
+
+        # Use subprocess.Popen to launch the process in the background.
+        # os.setsid() is used on Unix to detach the new process from the
+        # current terminal session, allowing it to continue running after
+        # the parent script exits.
+        process = subprocess.Popen(
+            command,
+            stdout=log_file,
+            stderr=log_file,
+            preexec_fn=os.setsid  # Detach from the terminal
+        )
+
+        # Write the new process's PID to the PID file.
+        config.PID_FILE.write_text(str(process.pid))
+        
+        print(f"Daemon started successfully with PID {process.pid}.")
+        return True
+    except Exception as e:
+        print(f"Error starting daemon: {e}", file=sys.stderr)
+        return False
+
+def stop_daemon_process() -> bool:
+    """
+    Stops the running daemon process.
+
+    It reads the PID from the PID file and sends a termination signal
+    to the process.
+
+    Returns:
+        True if the daemon was stopped successfully, False otherwise.
+    """
+    if not is_running():
+        print("Daemon is not running.")
+        return False
+
+    try:
+        pid = int(config.PID_FILE.read_text())
+        print(f"Stopping daemon with PID {pid}...")
+        
+        # Send a SIGTERM signal to gracefully shut down the process.
+        os.kill(pid, signal.SIGTERM)
+        
+        # Wait a moment to ensure the process has time to shut down.
+        time.sleep(1)
+        
+        # Clean up the PID file if the process is gone.
+        if not is_running():
+            config.PID_FILE.unlink()
+            print("Daemon stopped successfully.")
+        else:
+            print("Warning: Daemon process may not have shut down correctly.")
+            
+        return True
+    except (IOError, ValueError, OSError) as e:
+        print(f"Error stopping daemon: {e}", file=sys.stderr)
+        # If we can't read the PID or the process is already gone,
+        # just remove the stale PID file.
+        if config.PID_FILE.exists():
+            config.PID_FILE.unlink()
+        return False
+
+
+=================================================================
+FILE: src/ai_cli_bridge/daemon/daemon_cmd.py
+=================================================================
+"""
+Typer command module for managing the AI-CLI-Bridge Daemon.
+
+This file defines the `daemon` command group and its subcommands:
+`start`, `stop`, and `status`. It uses the `process_manager` to handle the
+actual lifecycle of the daemon process.
+"""
+
+import typer
+import requests
+from ..daemon import process_manager, config
+
+# Create a new Typer app just for the 'daemon' subcommands
+app = typer.Typer(
+    help="Manage the long-running AI daemon process.",
+    no_args_is_help=True
+)
+
+@app.command("start")
+def start_daemon():
+    """
+    Start the background AI daemon.
+    Initializes all AI instances and launches the browser for the session.
+    """
+    if process_manager.start_daemon_process():
+        raise typer.Exit(0)
+    else:
+        raise typer.Exit(1)
+
+@app.command("stop")
+def stop_daemon():
+    """
+    Stop the background AI daemon.
+    """
+    if process_manager.stop_daemon_process():
+        raise typer.Exit(0)
+    else:
+        raise typer.Exit(1)
+
+@app.command("status")
+def daemon_status():
+    """
+    Check the status of the AI daemon.
+    """
+    if not process_manager.is_running():
+        print("Daemon status: 🛑 Not Running")
+        raise typer.Exit(1)
+    
+    app_config = config.load_config()
+    daemon_config = app_config.get("daemon", {})
+    host = daemon_config.get("host", "127.0.0.1")
+    port = daemon_config.get("port", 8000)
+    url = f"http://{host}:{port}/status"
+    
+    try:
+        response = requests.get(url, timeout=2)
+        if response.status_code == 200:
+            print("Daemon status: ✅ Running")
+            # TODO: Add logic to pretty-print the JSON response from the status dashboard.
+            print("\nDaemon Response:")
+            print(response.json())
+            raise typer.Exit(0)
+        else:
+            print(f"Daemon status: ⚠️ Responded with status {response.status_code}")
+            raise typer.Exit(1)
+    except requests.ConnectionError:
+        print("Daemon status: 🟡 Running, but API is not responding.")
+        print("   - Check logs for errors: tail -f " + str(config.LOG_FILE))
+        raise typer.Exit(1)
+    except Exception as e:
+        print(f"An error occurred while checking status: {e}")
+        raise typer.Exit(1)
+
+# This is the entry point that the main cli.py will call
+def run():
+    app()
+
+
+=================================================================
+FILE: src/ai_cli_bridge/ai/base.py
+=================================================================
+"""Abstract base class for AI browser automation."""
+
+import asyncio
+import time
+from abc import ABC, abstractmethod
+from typing import Optional, Tuple, Dict, Any
+from datetime import datetime, timezone
+
+from playwright.async_api import async_playwright, Page, TimeoutError as PWTimeout
+
+class BaseAI(ABC):
+    """
+    Abstract base class for AI-specific browser automation.
+    
+    Defines the public interface and common implementation for all AI targets.
+    Each concrete AI class (ClaudeAI, ChatGPTAI, etc.) must implement
+    the abstract methods with AI-specific logic.
+    """
+    
+    # =========================
+    # Class-level configuration
+    # =========================
+    
+    @classmethod
+    @abstractmethod
+    def get_default_config(cls) -> Dict[str, Any]:
+        """
+        Get default configuration for this AI.
+        
+        Returns:
+            Dict with ai_target, base_url, cdp port, etc.
+        """
+        pass
+    
+    
+    # =========================
+    # Common state (shared by all AIs)
+    # =========================
+    
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize base AI.
+        
+        Args:
+            config: Config dict with 'ai_target' and 'cdp' keys
+        """
+        self._config = config
+        self._debug_enabled = False
+        self._cdp_url: Optional[str] = None
+        self._cdp_source: Optional[str] = None
+        self._turn_count: int = 0
+        self._last_page_url: Optional[str] = None
+
+    # =========================
+    # Public interface (Template Method)
+    # =========================
+    
+    async def send_prompt(
+        self,
+        message: str,
+        wait_for_response: bool = True,
+        timeout_s: int = 120
+    ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
+        """
+        Public method to send a prompt using the Template Method Pattern.
+        Handles connection, page selection, and cleanup, then calls the
+        subclass-specific implementation.
+        """
+        ws_url, ws_source = await self._discover_cdp_url()
+        if not ws_url:
+            self._debug(f"CDP discovery failed: {ws_source}")
+            return False, None, None, {"error": "no_cdp", "source": ws_source}
+            
+        self._debug(f"CDP connected via {ws_source}: {ws_url}")
+        
+        pw = await async_playwright().start()
+        remote = None
+        
+        try:
+            remote = await pw.chromium.connect_over_cdp(ws_url)
+            page = await self._pick_page(remote, self.get_base_url())
+            
+            if not page:
+                self._debug("No suitable page found")
+                return False, None, None, {"error": "no_page"}
+                
+            self._last_page_url = page.url
+            self._debug(f"Operating on page: {page.url}")
+            
+            # Call the subclass-specific implementation
+            success, snippet, markdown, metadata = await self._execute_interaction(
+                page, message, wait_for_response, timeout_s
+            )
+            
+            # --- CENTRAlIZED LOGIC ---
+            if success:
+                self._turn_count += 1
+                self._debug(f"Turn count incremented to: {self._turn_count}")
+
+            # Add common metadata
+            if metadata:
+                 metadata["ws_source"] = ws_source
+                 metadata["timestamp"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+            return success, snippet, markdown, metadata
+            
+        finally:
+            if remote: await remote.close()
+            await pw.stop()
+
+    # =========================
+    # Abstract methods (to be implemented by subclasses)
+    # =========================
+
+    @abstractmethod
+    async def _execute_interaction(
+        self,
+        page: Page,
+        message: str,
+        wait_for_response: bool,
+        timeout_s: int
+    ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
+        """
+        Subclass-specific implementation for the core AI interaction.
+        This method is called by the public send_prompt method.
+        """
+        pass
+        
+    @abstractmethod
+    async def list_messages(self) -> list[Dict[str, Any]]:
+        """
+        List all messages in the current conversation.
+        
+        Returns:
+            List of message dictionaries with keys:
+            - index: int
+            - type: 'user' | 'assistant' | 'system'
+            - preview: str (first ~60 chars)
+            - length: int (character count)
+        """
+        pass
+    
+    
+    @abstractmethod
+    async def extract_message(self, index: int) -> Optional[str]:
+        """
+        Extract the full content of a specific message.
+        
+        Args:
+            index: Message index (from list_messages)
+            
+        Returns:
+            Full message content or None if not found
+        """
+        pass
+    
+    
+    @abstractmethod
+    async def get_status(self) -> Dict[str, Any]:
+        """
+        Get current session status.
+        
+        Returns:
+            Dictionary with:
+            - connected: bool
+            - page_url: str
+            - message_count: int
+            - session_duration_s: float
+            - etc. (AI-specific fields)
+        """
+        pass
+    
+    # =========================
+    # Public interface (common implementation)
+    # =========================
+    
+    def get_turn_count(self) -> int:
+        """Get the current turn count for the session."""
+        return self._turn_count
+
+    def reset_turn_count(self) -> None:
+        """Reset the session turn count to 0."""
+        self._debug("Turn count reset to 0.")
+        self._turn_count = 0
+        
+    def set_debug(self, enabled: bool) -> None:
+        """Enable or disable debug output."""
+        self._debug_enabled = enabled
+    
+    
+    def get_debug(self) -> bool:
+        """Get current debug state."""
+        return self._debug_enabled
+    
+    
+    def get_cdp_info(self) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Get CDP connection information.
+        
+        Returns:
+            Tuple of (ws_url, source) where source is 'env'|'discovered'|'none'
+        """
+        return self._cdp_url, self._cdp_source
+    
+    
+    def get_cdp_port(self) -> int:
+        """Get CDP port from config (default 9222)."""
+        try:
+            return int(self._config.get("cdp", {}).get("port", 9222))
+        except Exception:
+            return 9222
+            
+    def get_base_url(self) -> str:
+        """Helper to get base_url from config."""
+        return self._config.get("base_url", "")
+    
+    
+    # =========================
+    # Protected helpers (available to subclasses)
+    # =========================
+    
+    def _debug(self, msg: str) -> None:
+        """Print debug message if debugging is enabled."""
+        if self._debug_enabled:
+            print(f"[{self.__class__.__name__}] {msg}")
+    
+    
+    # =========================
+    # Template methods (can be overridden by subclasses)
+    # =========================
+    
+    async def _discover_cdp_url(self) -> Tuple[Optional[str], str]:
+        """
+        Discover CDP WebSocket URL.
+        
+        Default implementation checks:
+        1. Environment variable AI_CLI_BRIDGE_CDP_URL
+        2. HTTP probe to http://127.0.0.1:<port>/json/version
+        
+        Subclasses can override for custom discovery logic.
+        
+        Returns:
+            Tuple of (ws_url or None, source: 'env'|'discovered'|'none')
+        """
+        import os
+        from urllib.request import urlopen
+        from urllib.error import URLError, HTTPError
+        import json
+        
+        # Check environment variable
+        env = (os.environ.get("AI_CLI_BRIDGE_CDP_URL") or "").strip()
+        if env.startswith(("ws://", "wss://")) and "/devtools/browser/" in env:
+            self._cdp_url = env
+            self._cdp_source = "env"
+            return env, "env"
+        
+        # Probe HTTP endpoint
+        port = self.get_cdp_port()
+        
+        url = f"http://127.0.0.1:{port}/json/version"
+        try:
+            with urlopen(url, timeout=2.0) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                ws = (data.get("webSocketDebuggerUrl") or "").strip()
+                if ws.startswith(("ws://", "wss://")) and "/devtools/browser/" in ws:
+                    self._cdp_url = ws
+                    self._cdp_source = "discovered"
+                    return ws, "discovered"
+        except (URLError, HTTPError, TimeoutError, ValueError, json.JSONDecodeError):
+            pass
+        
+        self._cdp_url = None
+        self._cdp_source = "none"
+        return None, "none"
+    
+    
+    async def _pick_page(self, remote, base_url: Optional[str]):
+        """
+        Pick a page from browser contexts.
+        
+        Default implementation prefers pages matching base_url, else first page.
+        
+        Args:
+            remote: Playwright browser instance connected via CDP
+            base_url: Preferred base URL to match
+            
+        Returns:
+            Page object or None
+        """
+        try:
+            contexts = getattr(remote, "contexts", []) or []
+            pages = []
+            for ctx in contexts:
+                pages.extend(getattr(ctx, "pages", []) or [])
+            
+            if base_url:
+                for p in pages:
+                    try:
+                        if (p.url or "").startswith(base_url):
+                            return p
+                    except Exception:
+                        continue
+            
+            return pages[0] if pages else None
+        except Exception:
+            return None
+    
+    
+    # =========================
+    # AI-specific methods (must be implemented by subclasses)
+    # =========================
+    
+    @abstractmethod
+    async def _wait_for_response_complete(self, page: Page, timeout_s: int) -> bool:
+        """
+        Wait for AI response to complete (AI-specific implementation).
+        
+        Args:
+            page: Playwright page object
+            timeout_s: Maximum time to wait
+            
+        Returns:
+            True if completion detected, False on timeout
+        """
+        pass
+    
+    
+    @abstractmethod
+    async def _extract_response(
+        self,
+        page: Page,
+        baseline_count: int
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """
+        Extract the last AI response from the page (AI-specific implementation).
+        
+        Args:
+            page: Playwright page object
+            baseline_count: Number of responses before sending prompt
+            
+        Returns:
+            Tuple of (snippet, full_markdown) or (None, None)
+        """
+        pass
+    
+    
+    @abstractmethod
+    async def _ensure_chat_ready(self, page: Page) -> bool:
+        """
+        Ensure the chat interface is ready for input (AI-specific implementation).
+        
+        Args:
+            page: Playwright page object
+            
+        Returns:
+            True if chat is ready, False otherwise
+        """
+        pass
+        
+    @abstractmethod
+    async def _ensure_chat_ready(self, page: Page) -> bool:
+        """
+        Ensure the chat interface is ready for input (AI-specific implementation).
+        
+        Args:
+            page: Playwright page object
+            
+        Returns:
+            True if chat is ready, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def start_new_session(self, page: Page) -> bool:
+        """
+        Start a new chat session/conversation (AI-specific implementation).
+
+        Args:
+            page: Playwright page object targeting this AI's website.
+
+        Returns:
+            True if a new session was started successfully, False otherwise.
+        """
+        pass
+
+
+=================================================================
+FILE: src/ai_cli_bridge/ai/claude.py
+=================================================================
+"""Claude-specific AI implementation."""
+
+import asyncio
+import time
+from typing import Optional, Tuple, Dict, Any
+
+from playwright.async_api import Page, TimeoutError as PWTimeout
+from .base import BaseAI
+from .factory import AIFactory
+
+try:
+    import markdownify
+except ImportError:
+    markdownify = None
+
+
+class ClaudeAI(BaseAI):
+    """
+    Claude-specific implementation of browser automation.
+    
+    Handles Claude's UI patterns, selectors, and timing requirements.
+    All configuration is self-contained - no external config files needed.
+    """
+    
+    # =========================
+    # Claude-specific constants
+    # =========================
+    
+    # Base URL and CDP
+    BASE_URL = "https://claude.ai"
+    CDP_PORT = 9223 # Match your browser launch script
+    
+    # Timing
+    STOP_BUTTON_WAIT_S = 3.0
+    BUTTON_STABILITY_MS = 500
+    RESPONSE_WAIT_S = 10.0
+    NEW_CHAT_WAIT_S = 0.5
+    COMPOSER_CHECK_TIMEOUT_S = 3.0
+    TYPING_DELAY_MS = 30
+    CHAT_NAV_TIMEOUT_MS = 10000
+    
+    # Content
+    SNIPPET_LENGTH = 280
+    SNIPPET_TRIM_WINDOW = 40
+    
+    # Claude selectors
+    INPUT_BOX = "div[contenteditable='true']"
+    SEND_BUTTON = "button[aria-label='Send message']"
+    STOP_BUTTON = "button[aria-label='Stop response']"
+    SEND_BUTTON_DISABLED = "button[aria-label='Send message'][disabled]"
+    SEND_ICON_PATH = "svg path[d*='208.49,120.49']"
+    RESPONSE_CONTAINER = ".font-claude-response"
+    RESPONSE_CONTENT = ".standard-markdown"
+    
+    NEW_CHAT_BUTTONS = [
+        "button[aria-label*='New chat']",
+        "a[aria-label*='New chat']",
+        "button:has-text('New chat')",
+    ]
+
+    # =========================
+    # Class-level configuration
+    # =========================
+    
+    @classmethod
+    def get_default_config(cls) -> Dict[str, Any]:
+        """Get Claude's default configuration."""
+        return {
+            "ai_target": "claude",
+            "base_url": cls.BASE_URL,
+            "cdp": {"port": cls.CDP_PORT},
+            "max_context_tokens": 200000
+        }
+    
+    def __init__(self, config: Dict[str, Any]):
+        """Initialize Claude AI instance."""
+        super().__init__(config)
+        self._message_count: int = 0
+    
+    # =========================
+    # Abstract method implementations
+    # =========================
+    
+    async def _execute_interaction(
+        self,
+        page: Page,
+        message: str,
+        wait_for_response: bool,
+        timeout_s: int
+    ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
+        """Claude-specific implementation of the core interaction logic."""
+
+        if not await self._ensure_chat_ready(page):
+            self._debug("Chat interface not ready")
+            return False, None, None, {"error": "chat_not_ready"}
+        
+        baseline_count = await self._get_response_count(page)
+        self._debug(f"Baseline response count: {baseline_count}")
+        
+        # Focus, clear, and type message
+        try:
+            el = await page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
+            await el.click()
+            await page.keyboard.press("Control+A")
+            await page.keyboard.press("Backspace")
+            await page.keyboard.type(message, delay=self.TYPING_DELAY_MS)
+            await page.keyboard.press("Enter")
+            self._debug("Message sent")
+        except Exception as e:
+            self._debug(f"Failed to send prompt: {e}")
+            return False, None, None, {"error": "send_failed"}
+
+        snippet, markdown, elapsed_ms = None, None, None
+        
+        if wait_for_response:
+            t0 = time.time()
+            
+            self._debug("Waiting for response completion...")
+            completed = await self._wait_for_response_complete(page, timeout_s)
+            self._debug(f"Response complete signal: {completed}")
+            
+            if completed:
+                snippet, markdown = await self._extract_response(page, baseline_count)
+                self._debug(f"Extracted - snippet: {len(snippet) if snippet else 0} chars...")
+
+            elapsed_ms = int((time.time() - t0) * 1000)
+            
+        self._message_count += 1
+        
+        metadata = {
+            "page_url": page.url,
+            "elapsed_ms": elapsed_ms,
+            "waited": wait_for_response,
+        }
+        
+        return True, snippet, markdown, metadata
+
+    async def list_messages(self) -> list[Dict[str, Any]]:
+        raise NotImplementedError("list_messages not yet implemented for Claude")
+
+    async def extract_message(self, index: int) -> Optional[str]:
+        raise NotImplementedError("extract_message not yet implemented for Claude")
+    
+    async def get_status(self) -> Dict[str, Any]:
+        """Get current session status for Claude."""
+        if self._cdp_url is None:
+            await self._discover_cdp_url()
+    
+        ws_url, ws_source = self.get_cdp_info()
+    
+        status = {
+            "ai_target": "claude",
+            "connected": ws_url is not None,
+            "cdp_source": ws_source,
+            "cdp_url": ws_url,
+            "last_page_url": self._last_page_url,
+            "message_count": self._message_count,
+            "turn_count": self.get_turn_count(),
+            "debug_enabled": self.get_debug(),
+        }
+        return status
+
+    async def start_new_session(self, page: Page) -> bool:
+        """Starts a new chat session in the Claude UI."""
+        self._debug("Attempting to start a new chat session...")
+        for selector in self.NEW_CHAT_BUTTONS:
+            try:
+                button = page.locator(selector).first
+                if await button.is_visible(timeout=1000):
+                    await button.click()
+                    self._debug(f"Clicked 'New Chat' button with selector: {selector}")
+                    # Wait for the composer to be ready as confirmation
+                    await page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
+                    self._debug("New session confirmed by visible input box.")
+                    return True
+            except Exception:
+                self._debug(f"Selector '{selector}' not found or failed, trying next one.")
+                continue
+        
+        self._debug("Failed to find any 'New Chat' button.")
+        return False
+    
+    # =========================
+    # Claude-specific protected methods
+    # =========================
+    
+    async def _ensure_chat_ready(self, page: Page) -> bool:
+        """Ensure Claude chat interface is ready for input."""
+        try:
+            url = page.url or ""
+        except Exception:
+            url = ""
+        
+        if not url.startswith(f"{self.BASE_URL}/chat"):
+            try:
+                await page.goto(
+                    f"{self.BASE_URL}/chat",
+                    wait_until="domcontentloaded",
+                    timeout=self.CHAT_NAV_TIMEOUT_MS
+                )
+                self._debug(f"Navigated to {self.BASE_URL}/chat")
+            except Exception:
+                pass
+        
+        try:
+            el = await page.wait_for_selector(
+                self.INPUT_BOX, state="visible", timeout=int(self.COMPOSER_CHECK_TIMEOUT_S * 1000)
+            )
+            if el:
+                self._debug("Composer visible")
+                return True
+        except Exception:
+            pass
+        
+        for sel in self.NEW_CHAT_BUTTONS:
+            try:
+                btn = await page.query_selector(sel)
+                if btn and await btn.is_visible():
+                    await btn.click()
+                    await asyncio.sleep(self.NEW_CHAT_WAIT_S)
+                    self._debug(f"Clicked new chat button: {sel}")
+                    break
+            except Exception:
+                continue
+        
+        try:
+            el = await page.wait_for_selector(
+                self.INPUT_BOX, state="visible", timeout=int(self.COMPOSER_CHECK_TIMEOUT_S * 1000)
+            )
+            return bool(el)
+        except Exception:
+            return False
+    
+    
+    async def _wait_for_response_complete(self, page: Page, timeout_s: int) -> bool:
+        """Wait for Claude response to complete by watching button states."""
+        deadline = time.time() + timeout_s
+        
+        # Phase 1: Wait for stop button (response started)
+        stop_button_deadline = time.time() + self.STOP_BUTTON_WAIT_S
+        response_started = False
+        
+        while time.time() < stop_button_deadline:
+            if await page.locator(self.STOP_BUTTON).count() > 0:
+                response_started = True
+                self._debug("Stop button visible - response started")
+                break
+            await asyncio.sleep(0.1)
+        
+        if not response_started:
+            self._debug("Stop button never appeared (instant/cached response?)")
+        
+        # Phase 2: Wait for disabled send button (response complete)
+        stable_since = None
+        
+        while time.time() < deadline:
+            try:
+                send_button = page.locator(self.SEND_BUTTON_DISABLED)
+                if await send_button.count() > 0 and await send_button.locator(self.SEND_ICON_PATH).count() > 0:
+                    now = time.time()
+                    if stable_since is None:
+                        stable_since = now
+                        self._debug("Send button disabled - checking stability")
+                    elif (now - stable_since) * 1000 >= self.BUTTON_STABILITY_MS:
+                        self._debug(f"Stable for {self.BUTTON_STABILITY_MS}ms - complete")
+                        return True
+                else:
+                    stable_since = None
+            except Exception:
+                stable_since = None
+            
+            await asyncio.sleep(0.1)
+        
+        self._debug("Response completion timeout")
+        return False
+    
+    
+    async def _extract_response(
+        self,
+        page: Page,
+        baseline_count: int
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """Extract the last Claude response."""
+        content_sel = f"{self.RESPONSE_CONTAINER}:has({self.RESPONSE_CONTENT})"
+        
+        try:
+            # Wait for new response
+            deadline = time.time() + self.RESPONSE_WAIT_S
+            while time.time() < deadline:
+                if await page.locator(content_sel).count() > baseline_count:
+                    break
+                await asyncio.sleep(0.2)
+            
+            last_response = page.locator(content_sel).last
+            content = last_response.locator(self.RESPONSE_CONTENT)
+            
+            html = await content.inner_html()
+            if not html or len(html) < 10:
+                return None, None
+            
+            # Strip UI chrome via JavaScript
+            cleaned_html = await page.evaluate("""
+                (html) => {
+                    const temp = document.createElement('div');
+                    temp.innerHTML = html;
+                    const selectors = ['button', '[role="button"]', '[data-testid*="toolbar"]', '[data-testid*="menu"]', '[aria-label*="Copy"]', '[aria-label*="Retry"]'];
+                    selectors.forEach(sel => temp.querySelectorAll(sel).forEach(el => el.remove()));
+                    return temp.innerHTML;
+                }
+            """, html)
+            
+            markdown = markdownify.markdownify(cleaned_html, heading_style="ATX").strip() if markdownify else (await content.inner_text()).strip()
+            snippet = self._create_snippet(markdown)
+            
+            return snippet, markdown
+            
+        except Exception as e:
+            self._debug(f"Extraction error: {e}")
+            return None, None
+    
+    # =========================
+    # Claude-specific helpers
+    # =========================
+    
+    async def _get_response_count(self, page: Page) -> int:
+        """Get current count of response bubbles with content."""
+        content_sel = f"{self.RESPONSE_CONTAINER}:has({self.RESPONSE_CONTENT})"
+        try:
+            return await page.locator(content_sel).count()
+        except Exception:
+            return 0
+    
+    def _create_snippet(self, text: str) -> str:
+        """Create smart-trimmed snippet from text."""
+        if not text:
+            return ""
+        
+        if len(text) <= self.SNIPPET_LENGTH:
+            return text
+        
+        cut = text[:self.SNIPPET_LENGTH]
+        last_break = max(
+            cut.rfind("\n"), cut.rfind(" "), cut.rfind("."),
+            cut.rfind("!"), cut.rfind("?")
+        )
+        
+        if last_break >= self.SNIPPET_LENGTH - self.SNIPPET_TRIM_WINDOW:
+            return cut[:last_break].rstrip() + " …"
+        
+        return cut + " …"
+
+# Register ClaudeAI with factory
+AIFactory.register("claude", ClaudeAI)
+
+
+
+=================================================================
+FILE: src/ai_cli_bridge/ai/gemini.py
+=================================================================
+"""Gemini-specific AI implementation."""
+
+import asyncio
+import time
+from typing import Optional, Tuple, Dict, Any
+
+from playwright.async_api import Page, TimeoutError as PWTimeout
+from .base import BaseAI
+from .factory import AIFactory
+
+try:
+    import markdownify
+except ImportError:
+    markdownify = None
+
+
+class GeminiAI(BaseAI):
+    """
+    Gemini-specific implementation of browser automation.
+    
+    Handles Gemini's UI patterns, selectors, and timing requirements.
+    Completion is detected by observing the appearance and subsequent
+    disappearance of the "Stop response" button.
+    """
+    
+    # =========================
+    # Gemini-specific constants
+    # =========================
+    
+    # Base URL and CDP
+    BASE_URL = "https://gemini.google.com"
+    CDP_PORT = 9223 # Match your browser launch script
+    
+    # Timing
+    RESPONSE_WAIT_S = 10.0
+    COMPLETION_CHECK_INTERVAL_S = 0.2
+    
+    # Content
+    SNIPPET_LENGTH = 280
+    SNIPPET_TRIM_WINDOW = 40
+    
+    # Gemini selectors
+    INPUT_BOX = "div.ql-editor[aria-label*='prompt']"
+    STOP_BUTTON = "button[aria-label='Stop response']"
+    NEW_CHAT_BUTTON = "a.new-chat-button" # Educated guess
+    RESPONSE_CONTAINER = "div.response-container-content"
+    RESPONSE_CONTENT = "div.markdown"
+
+    # =========================
+    # Class-level configuration
+    # =========================
+    
+    @classmethod
+    def get_default_config(cls) -> Dict[str, Any]:
+        """Get Gemini's default configuration."""
+        return {
+            "ai_target": "gemini",
+            "base_url": cls.BASE_URL,
+            "cdp": {"port": cls.CDP_PORT},
+            "max_context_tokens": 2000000
+        }
+        
+    def __init__(self, config: Dict[str, Any]):
+        """Initialize Gemini AI instance."""
+        super().__init__(config)
+        self._message_count: int = 0
+
+    # =========================
+    # Abstract method implementations
+    # =========================
+    
+    async def _execute_interaction(
+        self,
+        page: Page,
+        message: str,
+        wait_for_response: bool,
+        timeout_s: int
+    ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
+        """Gemini-specific implementation of the core interaction logic."""
+        
+        if not await self._ensure_chat_ready(page):
+            self._debug("Chat interface not ready")
+            return False, None, None, {"error": "chat_not_ready"}
+        
+        baseline_count = await self._get_response_count(page)
+        self._debug(f"Baseline response count: {baseline_count}")
+        
+        try:
+            await page.fill(self.INPUT_BOX, message, timeout=5000)
+            await page.keyboard.press("Enter")
+            self._debug("Message sent via Enter key")
+        except Exception as e:
+            self._debug(f"Failed to send prompt: {e}")
+            return False, None, None, {"error": "send_failed"}
+
+        snippet, markdown, elapsed_ms = None, None, None
+        
+        if wait_for_response:
+            t0 = time.time()
+            
+            self._debug("Waiting for response completion...")
+            completed = await self._wait_for_response_complete(page, timeout_s)
+            self._debug(f"Response complete signal: {completed}")
+            
+            if completed:
+                snippet, markdown = await self._extract_response(page, baseline_count)
+                self._debug(f"Extracted - snippet: {len(snippet) if snippet else 0} chars...")
+            
+            elapsed_ms = int((time.time() - t0) * 1000)
+        
+        self._message_count += 1
+        
+        metadata = {
+            "page_url": page.url,
+            "elapsed_ms": elapsed_ms,
+            "waited": wait_for_response,
+        }
+        
+        return True, snippet, markdown, metadata
+
+    async def list_messages(self) -> list[Dict[str, Any]]:
+        raise NotImplementedError("list_messages not yet implemented for Gemini")
+
+    async def extract_message(self, index: int) -> Optional[str]:
+        raise NotImplementedError("extract_message not yet implemented for Gemini")
+
+    async def get_status(self) -> Dict[str, Any]:
+        """Get current session status for Gemini."""
+        if self._cdp_url is None:
+            await self._discover_cdp_url()
+    
+        ws_url, ws_source = self.get_cdp_info()
+    
+        status = {
+            "ai_target": "gemini",
+            "connected": ws_url is not None,
+            "cdp_source": ws_source,
+            "cdp_url": ws_url,
+            "last_page_url": self._last_page_url,
+            "message_count": self._message_count,
+            "turn_count": self.get_turn_count(),
+            "debug_enabled": self.get_debug(),
+        }
+        return status
+
+    async def start_new_session(self, page: Page) -> bool:
+        """Starts a new chat session in the Gemini UI."""
+        self._debug("Attempting to start a new chat session...")
+        try:
+            button = page.locator(self.NEW_CHAT_BUTTON).first
+            await button.wait_for(state="visible", timeout=5000)
+            await button.click()
+            self._debug(f"Clicked 'New Chat' button.")
+            
+            await page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
+            self._debug("New session confirmed by visible input box.")
+            return True
+        except Exception as e:
+            self._debug(f"Failed to start new session: {e}")
+            return False
+        
+    # =========================
+    # Gemini-specific protected methods
+    # =========================
+    
+    async def _ensure_chat_ready(self, page: Page) -> bool:
+        """
+        Ensure Gemini chat interface is ready for input by checking the URL
+        and waiting for the input box.
+        """
+        self._debug(f"Checking if page URL '{page.url}' is correct.")
+        
+        if not page.url.startswith(self.BASE_URL):
+            self._debug(f"Page is not on Gemini. Attempting to navigate to {self.BASE_URL}")
+            try:
+                await page.goto(self.BASE_URL, wait_until="domcontentloaded", timeout=10000)
+                self._debug("Navigation successful.")
+            except Exception as e:
+                self._debug(f"Navigation to Gemini failed: {e}")
+                return False
+
+        try:
+            await page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
+            self._debug("Input box is visible, chat is ready.")
+            return True
+        except PWTimeout:
+            self._debug("Timed out waiting for input box after ensuring correct URL.")
+            return False
+
+    async def _wait_for_response_complete(self, page: Page, timeout_s: int) -> bool:
+        """
+        Wait for Gemini response to complete by polling for the stop button's
+        disappearance from within Python, respecting Trusted Type policies.
+        """
+        try:
+            self._debug("Waiting for stop button to appear...")
+            await page.wait_for_selector(self.STOP_BUTTON, state="visible", timeout=10000)
+            self._debug("Stop button appeared. Response generation has started.")
+            
+            self._debug("Polling until stop button disappears...")
+            deadline = time.time() + timeout_s
+            while time.time() < deadline:
+                count = await page.locator(self.STOP_BUTTON).count()
+                if count == 0:
+                    self._debug("Stop button is gone. Response is complete.")
+                    return True
+                await asyncio.sleep(0.2)
+            
+            self._debug("Polling timed out. Stop button never disappeared.")
+            return False
+
+        except Exception as e:
+            self._debug(f"An error occurred while waiting for completion: {e}")
+            return True
+
+    async def _extract_response(
+        self,
+        page: Page,
+        baseline_count: int
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """Extract the last Gemini response from the page."""
+        try:
+            deadline = time.time() + self.RESPONSE_WAIT_S
+            while time.time() < deadline:
+                current_count = await page.locator(self.RESPONSE_CONTAINER).count()
+                if current_count > baseline_count:
+                    break
+                await asyncio.sleep(self.COMPLETION_CHECK_INTERVAL_S)
+            
+            last_response_content = page.locator(self.RESPONSE_CONTENT).last
+            if await last_response_content.count() == 0:
+                 self._debug("No markdown content found in the last response.")
+                 return None, None
+            
+            html = await last_response_content.inner_html()
+            
+            if not html:
+                return None, None
+            
+            markdown_text = ""
+            if markdownify:
+                markdown_text = markdownify.markdownify(html, heading_style="ATX").strip()
+            else:
+                markdown_text = await last_response_content.inner_text()
+            
+            snippet = self._create_snippet(markdown_text)
+            
+            return snippet, markdown_text
+            
+        except Exception as e:
+            self._debug(f"Extraction error: {e}")
+            return None, None
+    
+    # =========================
+    # Gemini-specific helpers
+    # =========================
+
+    async def _get_response_count(self, page: Page) -> int:
+        """Get current count of response containers."""
+        return await page.locator(self.RESPONSE_CONTAINER).count()
+        
+    def _create_snippet(self, text: str) -> str:
+        """Create a smart-trimmed snippet from text."""
+        if not text:
+            return ""
+        
+        if len(text) <= self.SNIPPET_LENGTH:
+            return text
+        
+        cut = text[:self.SNIPPET_LENGTH]
+        last_break = max(
+            cut.rfind("\n"), cut.rfind(" "), cut.rfind("."),
+            cut.rfind("!"), cut.rfind("?")
+        )
+        
+        if last_break >= self.SNIPPET_LENGTH - self.SNIPPET_TRIM_WINDOW:
+            return cut[:last_break].rstrip() + " …"
+            
+        return cut + " …"
+
+# Register GeminiAI with the factory
+AIFactory.register("gemini", GeminiAI)
+
+
+
+=================================================================
+FILE: src/ai_cli_bridge/ai/factory.py
+=================================================================
+"""Factory for creating AI instances."""
+
+from typing import Dict, Any
+from .base import BaseAI
+
+
+class AIFactory:
+    """
+    Factory class for creating AI instances.
+    
+    Manages registration and instantiation of AI implementations.
+    """
+    
+    _registry: Dict[str, type[BaseAI]] = {}
+    
+    @classmethod
+    def register(cls, ai_name: str, ai_class: type[BaseAI]) -> None:
+        """
+        Register an AI implementation.
+        
+        Args:
+            ai_name: Lowercase AI identifier (e.g., 'claude', 'chatgpt')
+            ai_class: AI class that inherits from BaseAI
+        """
+        normalized_name = ai_name.lower().strip()
+        cls._registry[normalized_name] = ai_class
+    
+    
+    @classmethod
+    def get_class(cls, ai_name: str) -> type[BaseAI]:
+        """
+        Get the AI class without instantiating it.
+        
+        Args:
+            ai_name: AI identifier (e.g., 'claude', 'chatgpt')
+            
+        Returns:
+            The AI class (not an instance)
+            
+        Raises:
+            ValueError: If AI name is not registered
+        """
+        normalized_name = ai_name.lower().strip()
+        
+        if normalized_name not in cls._registry:
+            available = ", ".join(cls._registry.keys())
+            raise ValueError(
+                f"Unknown AI: '{ai_name}'. "
+                f"Available: {available}"
+            )
+        
+        return cls._registry[normalized_name]
+    
+    
+    @classmethod
+    def create(cls, ai_name: str, config: Dict[str, Any]) -> BaseAI:
+        """
+        Create an AI instance.
+        
+        Args:
+            ai_name: AI identifier (e.g., 'claude', 'chatgpt')
+            config: Configuration dictionary
+            
+        Returns:
+            Instance of the appropriate AI class
+            
+        Raises:
+            ValueError: If AI name is not registered
+        """
+        ai_class = cls.get_class(ai_name)
+        return ai_class(config)
+    
+    
+    @classmethod
+    def list_available(cls) -> list[str]:
+        """
+        List all registered AI names.
+        
+        Returns:
+            List of lowercase AI identifiers
+        """
+        return sorted(cls._registry.keys())
+    
+    
+    @classmethod
+    def is_registered(cls, ai_name: str) -> bool:
+        """
+        Check if an AI is registered.
+        
+        Args:
+            ai_name: AI identifier
+            
+        Returns:
+            True if registered, False otherwise
+        """
+        return ai_name.lower().strip() in cls._registry
+
+=================================================================
+FILE: src/ai_cli_bridge/cli.py
+=================================================================
+# ai_cli_bridge/cli.py
+
+from __future__ import annotations
+import typer
+
+# Import run() directly from each module (harmonized style)
+from .commands.open_cmd import run as open_run
+from .commands.doctor_cmd import run as doctor_run
+from .commands.init_cmd import run as init_run
+from .commands.init_cdp_cmd import run as init_cdp_run
+from .commands.status_cmd import run as status_run
+from .commands.send_cmd import run as send_run
+
+# If you've added inspect_cmd.py, uncomment these two lines:
+# from .commands.inspect_cmd import run as inspect_run
+
+app = typer.Typer(
+    add_completion=False,
+    help="ai-cli-bridge — Drive logged-in AI web UIs via CDP (Playwright).",
+    no_args_is_help=True,
+)
+
+@app.command("init")
+def init(
+    ai_name: str = typer.Argument(..., help="Target AI profile to initialize (non-CDP)."),
+):
+    """
+    Initialize target AI profile (non-CDP).
+    """
+    raise typer.Exit(init_run(ai_name))
+
+
+@app.command("init-cdp")
+def init_cdp(
+    ai_name: str = typer.Argument(..., help="Target AI (e.g., 'claude'). Launch Playwright Chromium in CDP mode."),
+):
+    """
+    Launch Playwright Chromium with remote debugging and a persistent user data dir.
+    Prints the DevTools ws URL.
+    """
+    raise typer.Exit(init_cdp_run(ai_name))
+
+
+@app.command("open")
+def open_cmd(
+    ai_name: str = typer.Argument(..., help="Target AI profile (e.g., 'claude')."),
+    conversation: str | None = typer.Option(
+        None,
+        "--conversation",
+        help="Optional conversation URL to open/attach.",
+    ),
+    force: bool = typer.Option(
+        False,
+        "--force",
+        help="Force navigation even if already on the same origin.",
+    ),
+):
+    """
+    Attach to the running CDP Chromium and open/attach to a target conversation.
+    Respects 'no reload if already on origin' logic.
+    """
+    raise typer.Exit(open_run(ai_name, conversation, force))
+
+
+@app.command("send")
+def send(
+    ai_name: str = typer.Argument(..., help="Target AI profile (e.g., 'claude')."),
+    message: str = typer.Argument(..., help="Text to send to the current conversation."),
+    wait: bool = typer.Option(
+        True,
+        "--wait/--no-wait",
+        help="Wait for assistant response and return a snippet (default: --wait).",
+    ),
+    timeout: int = typer.Option(
+        120,
+        "--timeout",
+        help="Overall wait timeout in seconds (default 120; if unchanged, config.response_wait applies).",
+        min=1,
+    ),
+    json: bool = typer.Option(
+        False,
+        "--json",
+        help="Emit a JSON envelope (includes 'snippet' and 'markdown' when available).",
+    ),
+    debug: bool = typer.Option(  # ADD THIS
+        False,
+        "--debug",
+        help="Enable debug output.",
+    ),
+):
+    """
+    Send a message to the current conversation.
+    """
+    raise typer.Exit(send_run(ai_name, message, wait, timeout, json, debug))  # Pass debug
+
+@app.command("doctor")
+def doctor():
+    """
+    Basic environment/system checks.
+    """
+    raise typer.Exit(doctor_run())
+
+
+# If you've added inspect_cmd.py, uncomment this command to expose it:
+# @app.command("inspect")
+# def inspect(
+#     ai_name: str = typer.Argument(..., help="Target AI (e.g., 'claude')."),
+# ):
+#     """
+#     Capture structural snapshots of the current page (selectors matrix, AX tree, HTML, screenshot).
+#     Artifacts are written under ~/.ai_cli_bridge/debug/<timestamp>/.
+#     """
+#     raise typer.Exit(inspect_run(ai_name))
+
+
+@app.command("version")
+def version():
+    """
+    Print ai-cli-bridge version.
+    """
+    # Keep in sync with pyproject.toml
+    typer.echo("ai-cli-bridge 1.3.1")
+
+
+def main():
+    app()
+
+
+if __name__ == "__main__":
+    main()
+    
+@app.command("status")
+def status(
+    ai_name: str = typer.Argument(..., help="Target AI profile name (e.g., 'claude')."),
+    json: bool = typer.Option(False, "--json", help="Emit a JSON envelope."),
+):
+    """Report CDP attach, current page URL, and selector sanity for the target."""
+    raise typer.Exit(status_run(ai_name, json))
+
+
+=================================================================
+FILE: src/ai_cli_bridge/commands/send_cmd.py
+=================================================================
+"""
+Client implementation for the 'send' command.
+
+This module is responsible for sending a prompt to the running AI daemon
+and displaying the response. It acts as a lightweight client, packaging the
+user's request and sending it over HTTP.
+"""
+import typer
+import requests
+import json as json_lib  # Renamed to avoid conflict with the 'json' parameter
+from typing import Optional
+
+# Import the daemon config to know where to connect
+from ..daemon import config as daemon_config
+
+def run(
+    ai_name: str,
+    message: str,
+    wait: bool,
+    timeout: int,
+    json: bool,
+    debug: bool,
+    # New parameters to be added in the future
+    inject: Optional[str] = None,
+    contextsize: Optional[int] = None,
+) -> int:
+    """
+    Executes the 'send' command by sending a request to the daemon.
+    """
+    try:
+        # Load daemon configuration to get host and port
+        cfg = daemon_config.load_config()
+        host = cfg.get("daemon", {}).get("host", "127.0.0.1")
+        port = cfg.get("daemon", {}).get("port", 8000)
+        daemon_url = f"http://{host}:{port}/send"
+
+        # Construct the JSON payload for the request
+        payload = {
+            "target": ai_name,
+            "prompt": message,
+            "wait_for_response": wait,
+            "timeout_s": timeout,
+            # Pass along other relevant options
+            "debug": debug,
+            "inject": inject,
+            "context_size": contextsize,
+        }
+
+        # Send the request to the daemon
+        # The timeout for the request should be slightly longer than the operation timeout
+        response = requests.post(daemon_url, json=payload, timeout=timeout + 10)
+        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+
+        # Process the response from the daemon
+        response_data = response.json()
+
+        if json:
+            # If --json flag is used, print the entire JSON response
+            typer.echo(json_lib.dumps(response_data, indent=2))
+        else:
+            # Otherwise, provide a human-readable summary
+            if response_data.get("success"):
+                typer.secho("✓ Sent", fg=typer.colors.GREEN)
+                metadata = response_data.get("metadata", {})
+                snippet = response_data.get("snippet")
+                
+                if snippet:
+                    typer.echo(f"  elapsed: {metadata.get('elapsed_ms')} ms")
+                    typer.echo("  response:")
+                    # CORRECTED LOGIC: Perform the replacement before the f-string
+                    formatted_snippet = snippet.replace('\n', '\n    ')
+                    typer.echo(f"    {formatted_snippet}")
+            else:
+                error_msg = response_data.get("metadata", {}).get("error", "Unknown error")
+                typer.secho(f"✗ Error: {error_msg}", fg=typer.colors.RED)
+                return 1
+
+    except requests.exceptions.ConnectionError:
+        typer.secho(
+            "Error: Cannot connect to the AI daemon. Is it running?",
+            fg=typer.colors.RED,
+        )
+        typer.echo("Please start it with 'ai-cli-bridge daemon start'")
+        return 1
+    except requests.exceptions.HTTPError as e:
+        typer.secho(f"Error: Received an error response from the daemon: {e.response.status_code}", fg=typer.colors.RED)
+        try:
+            # Try to print the detailed error from the daemon's response
+            typer.echo(e.response.json().get("detail", "No details provided."))
+        except json_lib.JSONDecodeError:
+            typer.echo("Could not parse error details from the daemon response.")
+        return 1
+    except Exception as e:
+        typer.secho(f"An unexpected error occurred: {e}", fg=typer.colors.RED)
+        return 1
+
+    return 0
+
+
+
+=================================================================
+FILE: src/pyproject.toml
+=================================================================
+[project]
+name = "ai-cli-bridge"
+version = "1.3.1"
+requires-python = ">=3.10"
+dependencies = [
+  "playwright==1.48.0",
+  "typer>=0.12",
+  "rich>=13.7",
+  "pydantic>=2.8",
+  "platformdirs>=4.0",
+  "orjson>=3.9",
+  "tomli",
+  "requests",
+  "fastapi",
+  "uvicorn[standard]",
+]
+[project.scripts]
+ai-cli-bridge = "ai_cli_bridge.cli:app"
+
+=================================================================
+END OF OVERVIEW
+=================================================================

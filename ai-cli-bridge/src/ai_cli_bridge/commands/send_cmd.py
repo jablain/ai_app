@@ -1,105 +1,99 @@
-"""Send command using AI abstraction layer."""
+"""
+Client implementation for the 'send' command.
 
-import asyncio
-import json as jsonlib
-from ..ai import AIFactory
+This module is responsible for sending a prompt to the running AI daemon
+and displaying the response. It acts as a lightweight client, packaging the
+user's request and sending it over HTTP.
+"""
+import typer
+import requests
+import json as json_lib  # Renamed to avoid conflict with the 'json' parameter
+from typing import Optional
 
+# Import the daemon config to know where to connect
+from ..daemon import config as daemon_config
 
 def run(
     ai_name: str,
     message: str,
-    wait: bool = True,
-    timeout: int = 120,
-    json_out: bool = False,
-    debug: bool = False
+    wait: bool,
+    timeout: int,
+    json: bool,
+    debug: bool,
+    # New parameters to be added in the future
+    inject: Optional[str] = None,
+    contextsize: Optional[int] = None,
 ) -> int:
     """
-    Send message via CDP connection using AI-specific implementation.
-    
-    Args:
-        ai_name: AI target name (claude, chatgpt, gemini)
-        message: Message text to send
-        wait: Whether to wait for response
-        timeout: Response timeout in seconds
-        json_out: Whether to output JSON format
-        debug: Enable debug output
-        
-    Returns:
-        Exit code (0 = success, non-zero = error)
+    Executes the 'send' command by sending a request to the daemon.
     """
-    # Get AI class and its default configuration
     try:
-        ai_class = AIFactory.get_class(ai_name)
-        cfg = ai_class.get_default_config()
-    except ValueError as e:
-        if json_out:
-            print(jsonlib.dumps({"ok": False, "error": "unknown_ai", "message": str(e)}, indent=2))
+        # Load daemon configuration to get host and port
+        cfg = daemon_config.load_config()
+        host = cfg.get("daemon", {}).get("host", "127.0.0.1")
+        port = cfg.get("daemon", {}).get("port", 8000)
+        daemon_url = f"http://{host}:{port}/send"
+
+        # Construct the JSON payload for the request
+        payload = {
+            "target": ai_name,
+            "prompt": message,
+            "wait_for_response": wait,
+            "timeout_s": timeout,
+            # Pass along other relevant options
+            "debug": debug,
+            "inject": inject,
+            "context_size": contextsize,
+        }
+
+        # Send the request to the daemon
+        # The timeout for the request should be slightly longer than the operation timeout
+        response = requests.post(daemon_url, json=payload, timeout=timeout + 10)
+        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+
+        # Process the response from the daemon
+        response_data = response.json()
+
+        if json:
+            # If --json flag is used, print the entire JSON response
+            typer.echo(json_lib.dumps(response_data, indent=2))
         else:
-            print(f"✗ {e}")
-        return 2
-    
-    # Create AI instance
-    try:
-        ai = AIFactory.create(ai_name, cfg)
-        ai.set_debug(debug)
-    except NotImplementedError as e:
-        if json_out:
-            print(jsonlib.dumps({"ok": False, "error": "not_implemented", "message": str(e)}, indent=2))
-        else:
-            print(f"✗ {e}")
-        return 2
-    
-    # Execute send
-    try:
-        success, snippet, markdown, metadata = asyncio.run(
-            ai.send_prompt(message, wait_for_response=wait, timeout_s=timeout)
-        )
-        
-        if not success:
-            error_msg = metadata.get("error", "unknown") if metadata else "unknown"
-            if json_out:
-                print(jsonlib.dumps({
-                    "ok": False,
-                    "error": error_msg,
-                    **(metadata or {})
-                }, indent=2))
-            else:
-                print(f"✗ Send failed: {error_msg}")
-            return 1
-        
-        # Success output
-        if json_out:
-            print(jsonlib.dumps({
-                "ok": True,
-                "snippet": snippet,
-                "markdown": markdown,
-                **(metadata or {})
-            }, indent=2))
-        else:
-            print("✓ Sent")
-            if wait and metadata:
-                elapsed_ms = metadata.get("elapsed_ms")
-                if elapsed_ms is not None:
-                    print(f"  elapsed: {elapsed_ms} ms")
+            # Otherwise, provide a human-readable summary
+            if response_data.get("success"):
+                typer.secho("✓ Sent", fg=typer.colors.GREEN)
+                metadata = response_data.get("metadata", {})
+                snippet = response_data.get("snippet")
                 
                 if snippet:
-                    print("  response:")
-                    for line in snippet.splitlines():
-                        print(f"    {line}")
-                else:
-                    print("  (no response extracted)")
-        
-        return 0
-        
-    except NotImplementedError as e:
-        if json_out:
-            print(jsonlib.dumps({"ok": False, "error": "not_implemented", "message": str(e)}, indent=2))
-        else:
-            print(f"✗ {e}")
-        return 2
-    except Exception as e:
-        if json_out:
-            print(jsonlib.dumps({"ok": False, "error": "exception", "message": str(e)}, indent=2))
-        else:
-            print(f"✗ Unexpected error: {e}")
+                    typer.echo(f"  elapsed: {metadata.get('elapsed_ms')} ms")
+                    typer.echo("  response:")
+                    # CORRECTED LOGIC: Perform the replacement before the f-string
+                    formatted_snippet = snippet.replace('\n', '\n    ')
+                    typer.echo(f"    {formatted_snippet}")
+            else:
+                error_msg = response_data.get("metadata", {}).get("error", "Unknown error")
+                typer.secho(f"✗ Error: {error_msg}", fg=typer.colors.RED)
+                return 1
+
+    except requests.exceptions.ConnectionError:
+        typer.secho(
+            "Error: Cannot connect to the AI daemon. Is it running?",
+            fg=typer.colors.RED,
+        )
+        typer.echo("Please start it with 'ai-cli-bridge daemon start'")
         return 1
+    except requests.exceptions.HTTPError as e:
+        typer.secho(f"Error: Received an error response from the daemon: {e.response.status_code}", fg=typer.colors.RED)
+        try:
+            # Try to print the detailed error from the daemon's response
+            typer.echo(e.response.json().get("detail", "No details provided."))
+        except json_lib.JSONDecodeError:
+            typer.echo("Could not parse error details from the daemon response.")
+        return 1
+    except Exception as e:
+        typer.secho(f"An unexpected error occurred: {e}", fg=typer.colors.RED)
+        return 1
+
+    return 0
+
+

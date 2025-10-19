@@ -94,3 +94,30 @@ class AIFactory:
             True if registered, False otherwise
         """
         return ai_name.lower().strip() in cls._registry
+    
+    
+    @classmethod
+    def import_all_ais(cls) -> None:
+        """
+        Import all AI modules to trigger their registration.
+        
+        This must be called before using list_available() or create()
+        to ensure all AI implementations are loaded.
+        """
+        # Import all AI implementations
+        # The import statements will trigger the AIFactory.register() calls
+        # at the bottom of each AI module
+        try:
+            from . import claude
+        except ImportError as e:
+            print(f"Warning: Could not import claude: {e}")
+        
+        try:
+            from . import gemini
+        except ImportError as e:
+            print(f"Warning: Could not import gemini: {e}")
+        
+        #try:
+            from . import chatgpt
+        except ImportError as e:
+            print(f"Warning: Could not import chatgpt: {e}")

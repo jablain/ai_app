@@ -1,0 +1,957 @@
+=================================================================
+AI-CLI-BRIDGE ADDITIONAL SOURCE FILES
+=================================================================
+
+
+=================================================================
+FILE: src/ai_cli_bridge/browser_manager.py
+=================================================================
+from __future__ import annotations
+
+from contextlib import asynccontextmanager
+from playwright.async_api import async_playwright, Page, BrowserContext
+from .errors import E, die
+from .display import has_display
+
+import asyncio
+import sys
+import os
+import json
+import time
+from urllib.request import urlopen
+from urllib.error import URLError
+
+
+# ---------------------------------------------------------------------------
+# Configuration & Detection
+# ---------------------------------------------------------------------------
+
+def _get_cdp_url() -> str | None:
+    """
+    Return the CDP URL (ws://127.0.0.1:PORT/devtools/browser/<id>) if the user
+    has exported AI_CLI_BRIDGE_CDP_URL. When present, we attach to an *external*
+    headed browser instead of launching our own.
+    """
+    return os.environ.get("AI_CLI_BRIDGE_CDP_URL")
+
+
+async def _ensure_cdp_browser(cfg) -> str | None:
+    """
+    Best-effort autostart for a CDP-enabled headed browser (Flatpak Ungoogled Chromium).
+    Triggered only if:
+      - AI_CLI_BRIDGE_CDP_URL is not set AND
+      - config["cdp"]["enable_autostart"] is true
+
+    Launches the browser with:
+      --remote-debugging-address=127.0.0.1
+      --remote-debugging-port=<port>
+      --user-data-dir=<profile>
+      --no-first-run --new-window
+      <startup_urls...>
+
+    Then polls http://127.0.0.1:<port>/json/version for webSocketDebuggerUrl.
+    If obtained, sets AI_CLI_BRIDGE_CDP_URL and returns the ws URL.
+
+    Returns None on failure without aborting (the caller may still proceed in non-CDP mode).
+    """
+    cdp = (cfg or {}).get("cdp") or {}
+    if not cdp.get("enable_autostart"):
+        return None
+
+    port = int(cdp.get("port", 9222))
+    wait_seconds = int(cdp.get("wait_seconds", 12))
+    flatpak_id = cdp.get("flatpak_id", "io.github.ungoogled_software.ungoogled_chromium")
+    user_data_dir = os.path.expanduser(cdp.get("user_data_dir", "~/.ai_cli_bridge/data/profiles/claude_cdp"))
+    startup_urls = cdp.get("startup_urls") or ["https://claude.ai/chat"]
+
+    cmd = [
+        "flatpak", "run", flatpak_id,
+        "--remote-debugging-address=127.0.0.1",
+        f"--remote-debugging-port={port}",
+        f"--user-data-dir={user_data_dir}",
+        "--no-first-run", "--new-window",
+        *startup_urls,
+    ]
+
+    try:
+        # Fire-and-forget; do not await completion of the GUI app
+        await asyncio.create_subprocess_exec(*cmd)
+    except Exception as e:
+        print(f"[AI-CLI-BRIDGE] CDP autostart failed to launch: {e}", file=sys.stderr)
+        return None
+
+    ws_url = None
+    deadline = time.time() + wait_seconds
+    version_url = f"http://127.0.0.1:{port}/json/version"
+    while time.time() < deadline and not ws_url:
+        try:
+            with urlopen(version_url, timeout=1.0) as r:
+                data = json.load(r)
+                ws_url = data.get("webSocketDebuggerUrl")
+                if ws_url:
+                    break
+        except URLError:
+            pass
+        except Exception:
+            pass
+        await asyncio.sleep(0.25)
+
+    if ws_url:
+        os.environ["AI_CLI_BRIDGE_CDP_URL"] = ws_url
+        print(f"[AI-CLI-BRIDGE] CDP ready: {ws_url}", file=sys.stderr)
+        return ws_url
+
+    print("[AI-CLI-BRIDGE] CDP autostart did not become ready in time.", file=sys.stderr)
+    return None
+
+
+# ---------------------------------------------------------------------------
+# Challenge detection & readiness checks
+# ---------------------------------------------------------------------------
+
+CHALLENGE_LOCATORS = [
+    # Generic
+    "iframe[title*='challenge']",
+    "iframe[src*='challenge']",
+    "[data-testid*='challenge']",
+    "text=/verify you are human/i",
+    "text=/are you a human/i",
+    "div:has-text('Verify you are human')",
+
+    # Cloudflare Turnstile
+    "iframe[src*='challenges.cloudflare.com']",
+    ".cf-challenge",
+    ".cf-turnstile",
+    "div[aria-label*='challenge']",
+
+    # Arkose / FunCaptcha
+    "iframe[src*='funcaptcha.com']",
+    "iframe[src*='arkoselabs.com']",
+]
+
+
+async def _any_visible(page: Page, selectors: list[str]) -> str | None:
+    """Return the first selector that is currently visible, else None."""
+    for sel in selectors:
+        if not sel:
+            continue
+        try:
+            if await page.locator(sel).first.is_visible():
+                return sel
+        except Exception:
+            pass
+    return None
+
+
+async def _check_auth_readiness(page: Page, cfg, timeout: int = 10) -> tuple[bool, str]:
+    """
+    Verify auth readiness per spec Section 5:
+      1) input_box present & enabled
+      2) login_form absent
+      3) error_indicator absent
+    """
+    selectors = cfg.get("selectors", {}) or {}
+    input_box = selectors.get("input_box")
+    login_form = selectors.get("login_form")
+    error_indicator = selectors.get("error_indicator")
+
+    try:
+        # 1) input_box present & enabled
+        if input_box:
+            locator = page.locator(input_box).first
+            await locator.wait_for(state="visible", timeout=timeout * 1000)
+            if not await locator.is_enabled():
+                return False, "Input box not enabled"
+
+        # 2) login_form absent
+        if login_form and await _any_visible(page, [login_form]):
+            return False, "Login form still visible"
+
+        # 3) error_indicator absent
+        if error_indicator and await _any_visible(page, [error_indicator]):
+            return False, "Error indicator present"
+
+        return True, "Auth ready"
+
+    except Exception as e:
+        return False, f"Auth check failed: {e}"
+
+
+async def wait_for_challenge_clear(page: Page, timeout: int = 120) -> bool:
+    """
+    Detect a human-verification challenge and wait until it disappears.
+    Returns True if a challenge was detected and later cleared; False if none found.
+    Raises E.E002 if it doesn't clear within `timeout`.
+    """
+    sel = await _any_visible(page, CHALLENGE_LOCATORS)
+    if not sel:
+        return False
+
+    print(
+        f"[AI-CLI-BRIDGE] Human verification detected ({sel}) — waiting up to {timeout}s...",
+        file=sys.stderr,
+    )
+    try:
+        await page.wait_for_selector(sel, state="hidden", timeout=timeout * 1000)
+        print("[AI-CLI-BRIDGE] Challenge cleared.", file=sys.stderr)
+        return True
+    except asyncio.TimeoutError:
+        die(E.E002, f"Challenge not cleared after {timeout}s. Please complete verification and retry.")
+
+
+# ---------------------------------------------------------------------------
+# Fingerprint softening (heads-only, gentle)
+# ---------------------------------------------------------------------------
+
+SOFTEN_ARGS = [
+    "--disable-blink-features=AutomationControlled",
+    "--disable-infobars",
+    "--password-store=basic",
+    "--use-mock-keychain",
+]
+
+REALISTIC_UA = (
+    "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/129.0.0.0 Safari/537.36"
+)
+
+STEALTH_INIT_JS = """
+// 1) navigator.webdriver → undefined
+Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+
+// 2) plugins & languages look normal
+try {
+  Object.defineProperty(navigator, 'languages', { get: () => ['en-US','en'] });
+  Object.defineProperty(navigator, 'plugins',   { get: () => [1,2,3] });
+} catch (e) {}
+
+// 3) Permissions.query spoof (common probe)
+const _query = (navigator.permissions && navigator.permissions.query)
+  ? navigator.permissions.query.bind(navigator.permissions)
+  : null;
+if (_query) {
+  navigator.permissions.query = (params) => {
+    if (params && params.name === 'notifications') {
+      return Promise.resolve({ state: Notification.permission });
+    }
+    return _query(params);
+  };
+}
+
+// 4) WebGL vendor/renderer echo (plausible AMD on Linux)
+(function() {
+  const VENDOR  = "AMD";
+  const RENDERER = "AMD Radeon 680M (RADV NAVI3X)";
+
+  function patch(getParameter) {
+    return function(pname) {
+      const gl = this;
+      try {
+        const dbg = gl.getExtension && (gl.getExtension('WEBGL_debug_renderer_info')
+                 || gl.getExtension('MOZ_WEBGL_debug_renderer_info')
+                 || gl.getExtension('WEBKIT_WEBGL_debug_renderer_info'));
+        if (dbg) {
+          const UNMASKED_VENDOR = dbg.UNMASKED_VENDOR_WEBGL;
+          const UNMASKED_RENDERER = dbg.UNMASKED_RENDERER_WEBGL;
+          if (pname === UNMASKED_VENDOR)   return VENDOR;
+          if (pname === UNMASKED_RENDERER) return RENDERER;
+        }
+      } catch (e) {}
+      return getParameter.apply(this, arguments);
+    };
+  }
+
+  try {
+    const p1 = (typeof WebGLRenderingContext !== 'undefined') && WebGLRenderingContext.prototype;
+    if (p1 && p1.getParameter) {
+      const orig = p1.getParameter;
+      Object.defineProperty(p1, 'getParameter', { value: patch(orig) });
+    }
+  } catch (_) {}
+
+  try {
+    const p2 = (typeof WebGL2RenderingContext !== 'undefined') && WebGL2RenderingContext.prototype;
+    if (p2 && p2.getParameter) {
+      const orig = p2.getParameter;
+      Object.defineProperty(p2, 'getParameter', { value: patch(orig) });
+    }
+  } catch (_) {}
+})();
+"""
+
+
+# ---------------------------------------------------------------------------
+# Main: launch/attach browser and ensure readiness
+# ---------------------------------------------------------------------------
+
+@asynccontextmanager
+async def launch_browser(cfg):
+    """
+    Launch (or attach to) a headed Chromium context per V1.3.1 spec.
+
+    Modes:
+      - CDP mode (preferred): if AI_CLI_BRIDGE_CDP_URL is present OR config.cdp.enable_autostart is true,
+        attach to user's *external* browser (Flatpak Ungoogled Chromium).
+      - Fallback mode: launch Playwright's persistent context (headed).
+
+    Navigation policy:
+      - Prefer an existing Claude tab (CDP mode).
+      - Only navigate if not already on the desired origin/path.
+      - Perform human-challenge wait only if a challenge is actually present.
+      - Verify auth readiness (input present & enabled, no login form, no error indicator).
+    """
+    if not has_display():
+        die(E.E001, "No display available. AI-CLI-Bridge cannot run headless.")
+
+    playwright = None
+    browser: BrowserContext | None = None
+
+    try:
+        playwright = await async_playwright().start()
+
+        # CDP autostart (if env not set) — frictionless startup
+        cdp_url = _get_cdp_url() or await _ensure_cdp_browser(cfg)
+
+        if cdp_url:
+            # ----- External Browser (CDP) Mode: attach to headed browser -----
+            try:
+                remote = await playwright.chromium.connect_over_cdp(cdp_url)
+            except Exception as e:
+                await playwright.stop()
+                die(E.E002, f"CDP connect failed: {e}. Ensure remote debugging is enabled.")
+            # Adopt an existing page or create a new one
+            try:
+                contexts = getattr(remote, "contexts", []) or []
+                pages = contexts[0].pages if contexts else []
+                page: Page = pages[0] if pages else await contexts[0].new_page()
+            except Exception:
+                page = await remote.new_page()
+            browser = remote  # maintain variable naming consistency
+
+        else:
+            # ----- Default Mode: Playwright-bundled Chromium (persistent, headed) -----
+            browser = await playwright.chromium.launch_persistent_context(
+                user_data_dir=str(cfg["_profile_dir"]),
+                headless=False,                 # headed-only per spec
+                args=SOFTEN_ARGS,               # reduce common automation markers
+                user_agent=REALISTIC_UA,        # align navigator.userAgent
+                locale="en-US",
+            )
+            # Inject stealth fixes for all pages in this persistent context
+            await browser.add_init_script(STEALTH_INIT_JS)
+            # Conservative, realistic UA + CH (Linux + Chromium 129)
+            await browser.set_extra_http_headers({
+                "User-Agent": REALISTIC_UA,
+                "sec-ch-ua": "\"Chromium\";v=\"129\", \"Not=A?Brand\";v=\"24\"",
+                "sec-ch-ua-mobile": "?0",
+                "sec-ch-ua-platform": "\"Linux\"",
+            })
+            page = browser.pages[0] if browser.pages else await browser.new_page()
+
+        # ------------------------
+        # Tab selection / navigation
+        # ------------------------
+        target_url = cfg.get("_conversation_url") or cfg.get("base_url", "https://claude.ai")
+
+        # In CDP mode, prefer an already-open Claude tab if present
+        try:
+            from urllib.parse import urlparse
+            def _host(u: str):
+                try:
+                    pu = urlparse(u or "")
+                    return (pu.scheme or "", pu.hostname or "", pu.port or -1)
+                except Exception:
+                    return ("", "", -1)
+
+            if _get_cdp_url():
+                pages = []
+                try:
+                    contexts = getattr(browser, "contexts", []) or []
+                    for ctx in contexts:
+                        pages.extend(getattr(ctx, "pages", []) or [])
+                except Exception:
+                    pass
+                for p in pages:
+                    u = getattr(p, "url", "") or ""
+                    sch, host, port = _host(u)
+                    if sch == "https" and host == "claude.ai":
+                        page = p
+                        break
+        except Exception:
+            pass
+
+        # Only navigate if we're not already on the desired origin/path
+        def _same_origin(u: str, v: str) -> bool:
+            try:
+                from urllib.parse import urlparse
+                pu, pv = urlparse(u), urlparse(v)
+                return (pu.scheme, pu.hostname, pu.port or -1) == (pv.scheme, pv.hostname, pv.port or -1)
+            except Exception:
+                return False
+
+        try:
+            cur = page.url
+        except Exception:
+            cur = ""
+
+        should_navigate = True
+        if cur and target_url:
+            # If on same origin and already a Claude route, avoid a reload (reduces CAPTCHA risk)
+            if _same_origin(cur, target_url) and cur.startswith("https://claude.ai/"):
+                should_navigate = False
+
+        if should_navigate:
+            await page.goto(target_url, timeout=cfg["timeouts"]["page_load"] * 1000)
+
+        # Gentle motion/scroll to add human-like entropy (no clicks/typing)
+        try:
+            await page.wait_for_timeout(800)
+            vw = await page.evaluate("() => window.innerWidth")
+            vh = await page.evaluate("() => window.innerHeight")
+            await page.mouse.move(int(vw * 0.3), int(vh * 0.5), steps=8)
+            await page.wait_for_timeout(140)
+            await page.mouse.move(int(vw * 0.6), int(vh * 0.3), steps=10)
+            await page.wait_for_timeout(200)
+            await page.mouse.wheel(delta_y=200)
+        except Exception:
+            pass
+
+        # Human-verification challenge handling (only if present)
+        challenge_timeout = cfg["timeouts"].get("response_wait", 120)
+        await wait_for_challenge_clear(page, timeout=challenge_timeout)
+
+        # Auth readiness (per spec §5)
+        ready, message = await _check_auth_readiness(page, cfg, timeout=cfg["timeouts"]["page_load"])
+        if not ready:
+            # Soft retry once if a challenge element is still present
+            try:
+                if await _any_visible(page, CHALLENGE_LOCATORS):
+                    await page.wait_for_timeout(15000)
+                    ready, message = await _check_auth_readiness(page, cfg, timeout=cfg["timeouts"]["page_load"])
+            except Exception:
+                pass
+
+        if not ready:
+            die(E.E002, f"Auth not ready: {message}. Open the page and complete login, then retry.")
+
+    except Exception as e:
+        # Teardown on error
+        if browser:
+            try:
+                await browser.close()
+            except Exception:
+                pass
+        if playwright:
+            try:
+                await playwright.stop()
+            except Exception:
+                pass
+        if isinstance(e, SystemExit):
+            raise
+        die(E.E002, f"Browser launch failed: {e}")
+
+    try:
+        # Yield the ready page to callers (open/send/etc.)
+        yield page
+    finally:
+        # Graceful shutdown:
+        # - CDP mode: DO NOT close the external browser; leave tabs intact.
+        # - Persistent mode: close our browser context.
+        try:
+            if _get_cdp_url():
+                # leave external browser running; nothing to do
+                pass
+            else:
+                await browser.close()
+        except Exception:
+            pass
+        try:
+            await playwright.stop()
+        except Exception:
+            pass
+
+
+=================================================================
+FILE: src/ai_cli_bridge/LaunchCDP.sh
+=================================================================
+#!/bin/bash
+# Launch Playwright Chromium with session restoration
+
+source ~/.ai_cli_bridge/venv/bin/activate
+
+# Check if already running
+if curl -s http://127.0.0.1:9223/json >/dev/null 2>&1; then
+    echo "✓ CDP browser already running on port 9223"
+    exit 0
+fi
+
+echo "🚀 Launching Playwright Chromium with saved session..."
+
+CHROMIUM_PATH=$(python -c "from playwright.sync_api import sync_playwright; p = sync_playwright().start(); print(p.chromium.executable_path); p.stop()")
+
+# CORRECT profile path - must match your existing CDP profile!
+PROFILE_DIR="/home/jacques/.ai_cli_bridge/data/profiles/claude_cdp_pw"
+
+# Ensure profile directory exists
+mkdir -p "$PROFILE_DIR"
+
+"$CHROMIUM_PATH" \
+  --remote-debugging-port=9223 \
+  --user-data-dir="$PROFILE_DIR" \
+  --restore-last-session \
+  --no-first-run \
+  --no-default-browser-check &
+
+# Wait for CDP
+echo "→ Waiting for CDP..."
+for i in {1..10}; do
+    if curl -s http://127.0.0.1:9223/json >/dev/null 2>&1; then
+        echo "✓ Browser ready!"
+        break
+    fi
+    sleep 1
+done
+
+=================================================================
+FILE: src/ai_cli_bridge/config.py
+=================================================================
+import json, re, os
+from pathlib import Path
+from .errors import E, die
+
+ROOT = Path.home() / ".ai_cli_bridge"
+CONF = ROOT / "config"
+DEFAULT_TIMEOUTS = {
+    "browser_launch": 30,
+    "page_load": 30,
+    "response_wait": 120,
+    "file_upload": 30,
+    "response_stability_ms": 2000,
+}
+
+def load(ai: str):
+    p = CONF / f"{ai}.json"
+    try:
+        data = json.loads(p.read_text())
+    except Exception as e:
+        die(E.E003, f"(read {p}): {e}")
+
+    # basic validation (FIX: correct regex with single backslash for dot)
+    try:
+        sv = data.get("schema_version", "1.0.0")
+        if not re.match(r"^1\.[0-9]+\.[0-9]+$", sv or ""):
+            raise AssertionError(f"schema_version invalid: {sv!r}")
+        if not isinstance(data.get("selectors"), dict):
+            raise AssertionError("selectors is not an object/dict")
+        bu = data.get("base_url")
+        if not (isinstance(bu, str) and bu.startswith("http")):
+            raise AssertionError(f"base_url invalid: {bu!r}")
+    except Exception as e:
+        die(E.E003, f"(validate {p}): {e}")
+
+    # timeouts merged with defaults
+    t = {**DEFAULT_TIMEOUTS, **(data.get("timeouts") or {})}
+    data["timeouts"] = t
+
+    # profile dir
+    prof = ROOT / "data" / "profiles" / ai
+    prof.mkdir(parents=True, exist_ok=True)
+    data["_profile_dir"] = str(prof)
+    return data
+
+def ensure_dirs():
+    for d in ["config", "data/profiles", "cache/locks", "logs"]:
+        (ROOT / Path(d)).mkdir(parents=True, exist_ok=True)
+    for d in [ROOT, ROOT / "config", ROOT / "data", ROOT / "cache"]:
+        try:
+            os.chmod(d, 0o700)
+        except Exception:
+            pass
+
+=================================================================
+FILE: src/ai_cli_bridge/lock_manager.py
+=================================================================
+import json, os, time
+from pathlib import Path
+from .errors import E, die
+ROOT=Path.home()/".ai_cli_bridge"
+LOCKDIR=ROOT/"cache"/"locks"
+def _alive(pid:int)->bool:
+    try: os.kill(pid,0); return True
+    except Exception: return False
+def acquire(ai:str, conversation:str|None=None, force:bool=False):
+    LOCKDIR.mkdir(parents=True, exist_ok=True)
+    path=LOCKDIR/f"{ai}.lock"
+    if path.exists():
+        try:
+            data=json.loads(path.read_text()); pid=int(data.get("pid",0))
+        except: pid=0
+        stale = (not _alive(pid)) or (time.time()-path.stat().st_mtime>86400)
+        if not stale and not force: die(E.E005)
+        try: path.unlink()
+        except: pass
+    fd=os.open(path, os.O_CREAT|os.O_EXCL|os.O_WRONLY, 0o600)
+    with os.fdopen(fd,"w") as f:
+        f.write(json.dumps({
+            "version":"1.0","pid":os.getpid(),
+            "created_at":time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+        }))
+    return path
+def release(ai:str):
+    path=LOCKDIR/f"{ai}.lock"
+    try: path.unlink()
+    except: pass
+
+=================================================================
+FILE: src/ai_cli_bridge/commands/init_cdp_cmd.py
+=================================================================
+# ai_cli_bridge/commands/init_cdp_cmd.py
+
+import json
+import os
+import socket
+import subprocess
+import time
+from pathlib import Path
+from typing import Any, Dict
+
+from ..config import load
+from ..errors import E, die
+
+
+def _is_port_open(port: int) -> bool:
+    try:
+        with socket.create_connection(("127.0.0.1", port), timeout=0.5):
+            return True
+    except OSError:
+        return False
+
+
+def _ensure_dir(p: str):
+    d = Path(p)
+    d.mkdir(parents=True, exist_ok=True)
+    # lock down perms per spec
+    os.chmod(d, 0o700)
+
+
+def _launch_playwright(cdp_cfg: Dict[str, Any]) -> subprocess.Popen:
+    """
+    Launch Playwright-bundled Chromium with:
+      --remote-debugging-port
+      --user-data-dir
+      startup URLs
+    """
+    port = int(cdp_cfg.get("port", 9223))
+    user_data_dir = cdp_cfg.get("user_data_dir")
+    if not user_data_dir:
+        die(E.E003, "cdp.user_data_dir is required for launcher=playwright")
+
+    _ensure_dir(user_data_dir)
+
+    # Locate the Playwright Chromium executable
+    py = (
+        "from playwright.sync_api import sync_playwright; "
+        "p=sync_playwright().start(); "
+        "print(p.chromium.executable_path); "
+        "p.stop()"
+    )
+    try:
+        exe = subprocess.check_output(["python", "-c", py], text=True).strip()
+    except Exception as e:
+        die(E.E003, f"Unable to locate Playwright Chromium: {e}")
+
+    urls = list(cdp_cfg.get("startup_urls") or [])
+    args = [
+        exe,
+        f"--remote-debugging-port={port}",
+        f"--user-data-dir={user_data_dir}",
+        "--no-first-run",
+        "--new-window",
+    ] + urls
+
+    # Launch detached so CLI can return while browser lives
+    return subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
+def _launch_flatpak(cdp_cfg: Dict[str, Any]) -> subprocess.Popen:
+    """
+    Launch Ungoogled Chromium Flatpak with remote debugging.
+    """
+    port = int(cdp_cfg.get("port", 9222))
+    user_data_dir = cdp_cfg.get("user_data_dir")
+    flatpak_id = cdp_cfg.get("flatpak_id", "io.github.ungoogled_software.ungoogled_chromium")
+
+    if not user_data_dir:
+        die(E.E003, "cdp.user_data_dir is required for launcher=flatpak")
+
+    _ensure_dir(user_data_dir)
+
+    urls = list(cdp_cfg.get("startup_urls") or [])
+    base = [
+        "flatpak", "run", flatpak_id,
+        f"--remote-debugging-port={port}",
+        f"--user-data-dir={user_data_dir}",
+        "--no-first-run",
+        "--new-window",
+    ]
+    args = base + urls
+    return subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+
+def _wait_for_ws(port: int, wait_seconds: int) -> str | None:
+    """
+    Poll /json/version until webSocketDebuggerUrl is present, or timeout.
+    """
+    import urllib.request
+    deadline = time.time() + max(1, wait_seconds)
+    while time.time() < deadline:
+        try:
+            with urllib.request.urlopen(f"http://127.0.0.1:{port}/json/version", timeout=1.5) as r:
+                meta = json.loads(r.read().decode("utf-8", "ignore"))
+            ws = meta.get("webSocketDebuggerUrl") or meta.get("websocketDebuggerUrl")
+            if ws and ws != "null":
+                return ws
+        except Exception:
+            pass
+        time.sleep(0.4)
+    return None
+
+
+def run(ai_name: str) -> int:
+    """
+    Launch a CDP-enabled browser for the given AI config and print a ws:// URL.
+    Returns exit code: 0 on success, 1 on failure.
+    """
+    cfg = load(ai_name)
+    cdp = cfg.get("cdp") or {}
+    if not cdp:
+        die(E.E003, f"No 'cdp' block found in config for '{ai_name}'")
+
+    launcher = (cdp.get("launcher") or "flatpak").strip().lower()
+    port = int(cdp.get("port") or (9223 if launcher == "playwright" else 9222))
+    wait_seconds = int(cdp.get("wait_seconds") or 10)
+
+    # If something is already listening, don't double-launch; just try to read the ws endpoint.
+    proc = None
+    try:
+        if not _is_port_open(port):
+            print("Launching CDP browser...")
+            if launcher == "playwright":
+                proc = _launch_playwright(cdp)
+            elif launcher == "flatpak":
+                proc = _launch_flatpak(cdp)
+            else:
+                die(E.E003, f"Unknown cdp.launcher '{launcher}'. Expected 'playwright' or 'flatpak'.")
+
+        ws = _wait_for_ws(port, wait_seconds)
+        if not ws:
+            if proc and proc.poll() is not None:
+                # Process died early; show a hint
+                try:
+                    _, err = proc.communicate(timeout=0.5)
+                    err_txt = err.decode("utf-8", "ignore")
+                except Exception:
+                    err_txt = "(no stderr)"
+                die(E.E002, f"DevTools endpoint not available. Browser exited early.\n{err_txt}")
+            die(E.E002, "DevTools endpoint not available. Is the browser blocked by pop-ups or policy?")
+
+        print(f"CDP ready: {ws}")
+        print("Tip: export this in your shell if you want it available to subsequent commands:")
+        print(f'export AI_CLI_BRIDGE_CDP_URL="{ws}"')
+        return 0
+    finally:
+        # Do NOT kill the browser; leave it running for the session.
+        pass
+
+
+=================================================================
+FILE: src/ai_cli_bridge/commands/status_cmd.py
+=================================================================
+"""Status command using AI abstraction layer."""
+
+import asyncio
+import json as jsonlib
+from ..ai import AIFactory
+
+
+def run(ai_name: str, json_out: bool = False) -> int:
+    """
+    Get status of AI session.
+    
+    Args:
+        ai_name: AI target name (claude, chatgpt, gemini)
+        json_out: Whether to output JSON format
+        
+    Returns:
+        Exit code (0 = success, non-zero = error)
+    """
+    # Get AI class and its default configuration
+    try:
+        ai_class = AIFactory.get_class(ai_name)
+        cfg = ai_class.get_default_config()
+    except ValueError as e:
+        if json_out:
+            print(jsonlib.dumps({"ok": False, "error": "unknown_ai", "message": str(e)}, indent=2))
+        else:
+            print(f"✗ {e}")
+        return 2
+    
+    try:
+        ai = AIFactory.create(ai_name, cfg)
+        status = asyncio.run(ai.get_status())
+        
+        if json_out:
+            print(jsonlib.dumps(status, indent=2))
+        else:
+            print(f"AI Target: {status.get('ai_target', 'unknown')}")
+            print(f"Connected: {status.get('connected', False)}")
+            print(f"CDP Source: {status.get('cdp_source', 'none')}")
+            
+            if status.get('cdp_url'):
+                print(f"CDP URL: {status['cdp_url']}")
+            
+            if status.get('last_page_url'):
+                print(f"Page URL: {status['last_page_url']}")
+            
+            print(f"Message Count: {status.get('message_count', 0)}")
+            
+            if 'session_duration_s' in status:
+                duration = status['session_duration_s']
+                print(f"Session Duration: {duration:.1f}s")
+        
+        return 0
+        
+    except ValueError as e:
+        if json_out:
+            print(jsonlib.dumps({"ok": False, "error": "unknown_ai", "message": str(e)}, indent=2))
+        else:
+            print(f"✗ {e}")
+        return 2
+    except Exception as e:
+        if json_out:
+            print(jsonlib.dumps({"ok": False, "error": "exception", "message": str(e)}, indent=2))
+        else:
+            print(f"✗ Unexpected error: {e}")
+        return 1
+
+=================================================================
+FILE: src/ai_cli_bridge/display.py
+=================================================================
+import os
+def has_display(): return bool(os.environ.get("DISPLAY") or os.environ.get("WAYLAND_DISPLAY"))
+def mode():
+    if os.environ.get("WAYLAND_DISPLAY"): return "Wayland"
+    if os.environ.get("DISPLAY"): return "X11"
+    return "Unknown"
+
+=================================================================
+FILE: src/ai_cli_bridge/errors.py
+=================================================================
+from enum import IntEnum
+class Exit(IntEnum):
+    OK=0; SESSION=1; CONFIG=2; DISPLAY=3; CONCURRENCY=4; IOFS=5
+class E:
+    E001=("E001","No graphical display detected. AI-CLI-Bridge cannot run headless.",Exit.DISPLAY)
+    E002=("E002","Browser session not found or not ready.",Exit.SESSION)
+    E003=("E003","Config parse/validation error.",Exit.CONFIG)
+    E004=("E004","Selector not found or invalid.",Exit.CONFIG)
+    E005=("E005","Concurrent session detected.",Exit.CONCURRENCY)
+def die(err, extra=None):
+    code,msg,exitc = err
+    if extra: msg=f"{msg} {extra}"
+    print(f"{code}: {msg}")
+    raise SystemExit(exitc)
+
+=================================================================
+FILE: src/ai_cli_bridge/ai/chatgpt.py
+=================================================================
+"""ChatGPT-specific AI implementation (stub)."""
+
+from typing import Optional, Tuple, Dict, Any
+from playwright.async_api import Page
+from .base import BaseAI
+from .factory import AIFactory
+
+
+class ChatGPTAI(BaseAI):
+    """
+    ChatGPT-specific implementation (NOT YET IMPLEMENTED).
+    
+    This is a placeholder stub to prevent crashes.
+    All methods raise NotImplementedError.
+    """
+    
+    @classmethod
+    def get_default_config(cls) -> Dict[str, Any]:
+        """Get ChatGPT's default configuration."""
+        return {
+            "ai_target": "chatgpt",
+            "base_url": "https://chat.openai.com",
+            "cdp": {"port": 9222}
+        }
+    
+    
+    def __init__(self, config: Dict[str, Any]):
+        """Initialize ChatGPT AI instance."""
+        super().__init__(config)
+        self._debug("ChatGPTAI initialized (stub - not functional)")
+    
+    
+    async def send_prompt(
+        self,
+        message: str,
+        wait_for_response: bool = True,
+        timeout_s: int = 120
+    ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
+        """Send prompt to ChatGPT (NOT IMPLEMENTED)."""
+        raise NotImplementedError(
+            "ChatGPT support not yet implemented. "
+            "Only Claude is currently supported."
+        )
+    
+    
+    async def list_messages(self) -> list[Dict[str, Any]]:
+        """List ChatGPT messages (NOT IMPLEMENTED)."""
+        raise NotImplementedError("ChatGPT support not yet implemented.")
+    
+    
+    async def extract_message(self, index: int) -> Optional[str]:
+        """Extract ChatGPT message (NOT IMPLEMENTED)."""
+        raise NotImplementedError("ChatGPT support not yet implemented.")
+    
+    
+    async def get_status(self) -> Dict[str, Any]:
+        """Get ChatGPT status (NOT IMPLEMENTED)."""
+        raise NotImplementedError("ChatGPT support not yet implemented.")
+    
+    
+    async def _wait_for_response_complete(self, page: Page, timeout_s: int) -> bool:
+        """Wait for ChatGPT response (NOT IMPLEMENTED)."""
+        raise NotImplementedError("ChatGPT support not yet implemented.")
+    
+    
+    async def _extract_response(
+        self,
+        page: Page,
+        baseline_count: int
+    ) -> Tuple[Optional[str], Optional[str]]:
+        """Extract ChatGPT response (NOT IMPLEMENTED)."""
+        raise NotImplementedError("ChatGPT support not yet implemented.")
+    
+    
+    async def _ensure_chat_ready(self, page: Page) -> bool:
+        """Ensure ChatGPT chat ready (NOT IMPLEMENTED)."""
+        raise NotImplementedError("ChatGPT support not yet implemented.")
+
+
+# Register ChatGPTAI with factory
+AIFactory.register("chatgpt", ChatGPTAI)
+
+=================================================================
+FILE: runtime/config/daemon_config.toml
+=================================================================
+[FILE NOT FOUND]
+
+=================================================================
+END OF ADDITIONAL FILES
+=================================================================

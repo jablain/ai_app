@@ -11,14 +11,17 @@ from .commands.init_cdp_cmd import run as init_cdp_run
 from .commands.status_cmd import run as status_run
 from .commands.send_cmd import run as send_run
 
-# If you've added inspect_cmd.py, uncomment these two lines:
-# from .commands.inspect_cmd import run as inspect_run
+# Import daemon command group
+from .daemon import daemon_cmd
 
 app = typer.Typer(
     add_completion=False,
     help="ai-cli-bridge — Drive logged-in AI web UIs via CDP (Playwright).",
     no_args_is_help=True,
 )
+
+# Add daemon subcommand group
+app.add_typer(daemon_cmd.app, name="daemon")
 
 @app.command("init")
 def init(
@@ -82,7 +85,7 @@ def send(
         "--json",
         help="Emit a JSON envelope (includes 'snippet' and 'markdown' when available).",
     ),
-    debug: bool = typer.Option(  # ADD THIS
+    debug: bool = typer.Option(
         False,
         "--debug",
         help="Enable debug output.",
@@ -91,7 +94,7 @@ def send(
     """
     Send a message to the current conversation.
     """
-    raise typer.Exit(send_run(ai_name, message, wait, timeout, json, debug))  # Pass debug
+    raise typer.Exit(send_run(ai_name, message, wait, timeout, json, debug))
 
 @app.command("doctor")
 def doctor():
@@ -101,34 +104,6 @@ def doctor():
     raise typer.Exit(doctor_run())
 
 
-# If you've added inspect_cmd.py, uncomment this command to expose it:
-# @app.command("inspect")
-# def inspect(
-#     ai_name: str = typer.Argument(..., help="Target AI (e.g., 'claude')."),
-# ):
-#     """
-#     Capture structural snapshots of the current page (selectors matrix, AX tree, HTML, screenshot).
-#     Artifacts are written under ~/.ai_cli_bridge/debug/<timestamp>/.
-#     """
-#     raise typer.Exit(inspect_run(ai_name))
-
-
-@app.command("version")
-def version():
-    """
-    Print ai-cli-bridge version.
-    """
-    # Keep in sync with pyproject.toml
-    typer.echo("ai-cli-bridge 1.3.1")
-
-
-def main():
-    app()
-
-
-if __name__ == "__main__":
-    main()
-    
 @app.command("status")
 def status(
     ai_name: str = typer.Argument(..., help="Target AI profile name (e.g., 'claude')."),
@@ -137,3 +112,18 @@ def status(
     """Report CDP attach, current page URL, and selector sanity for the target."""
     raise typer.Exit(status_run(ai_name, json))
 
+
+@app.command("version")
+def version():
+    """
+    Print ai-cli-bridge version.
+    """
+    typer.echo("ai-cli-bridge 2.0.0")
+
+
+def main():
+    app()
+
+
+if __name__ == "__main__":
+    main()

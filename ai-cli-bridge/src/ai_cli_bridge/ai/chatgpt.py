@@ -1,80 +1,91 @@
-"""ChatGPT-specific AI implementation (stub)."""
+"""ChatGPT-specific AI implementation."""
 
-from typing import Optional, Tuple, Dict, Any
+from typing import Dict, Any
+
 from playwright.async_api import Page
-from .base import BaseAI
+
+from .web_base import WebAIBase
 from .factory import AIFactory
 
 
-class ChatGPTAI(BaseAI):
-    """
-    ChatGPT-specific implementation (NOT YET IMPLEMENTED).
+class ChatGPTAI(WebAIBase):
+    """ChatGPT-specific implementation using the web AI base."""
     
-    This is a placeholder stub to prevent crashes.
-    All methods raise NotImplementedError.
-    """
+    # =========================
+    # ChatGPT configuration
+    # =========================
+    
+    BASE_URL = "https://chatgpt.com"
+    CDP_PORT = 9223
     
     @classmethod
     def get_default_config(cls) -> Dict[str, Any]:
         """Get ChatGPT's default configuration."""
         return {
             "ai_target": "chatgpt",
-            "base_url": "https://chat.openai.com",
-            "cdp": {"port": 9222}
+            "base_url": cls.BASE_URL,
+            "cdp": {"port": cls.CDP_PORT},
+            "max_context_tokens": 128000  # GPT-4 Turbo context window
         }
     
+    # =========================
+    # ChatGPT selectors
+    # =========================
     
-    def __init__(self, config: Dict[str, Any]):
-        """Initialize ChatGPT AI instance."""
-        super().__init__(config)
-        self._debug("ChatGPTAI initialized (stub - not functional)")
+    @property
+    def INPUT_BOX(self) -> str:
+        return "textarea[name='prompt-textarea']"
     
+    @property
+    def STOP_BUTTON(self) -> str:
+        return "button[data-testid='stop-button']"
     
-    async def send_prompt(
-        self,
-        message: str,
-        wait_for_response: bool = True,
-        timeout_s: int = 120
-    ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
-        """Send prompt to ChatGPT (NOT IMPLEMENTED)."""
-        raise NotImplementedError(
-            "ChatGPT support not yet implemented. "
-            "Only Claude is currently supported."
-        )
+    @property
+    def NEW_CHAT_BUTTON(self) -> str:
+        return "a[data-testid='create-new-chat-button']"
     
+    @property
+    def RESPONSE_CONTAINER(self) -> str:
+        return "div[data-message-author-role='assistant']"
     
-    async def list_messages(self) -> list[Dict[str, Any]]:
-        """List ChatGPT messages (NOT IMPLEMENTED)."""
-        raise NotImplementedError("ChatGPT support not yet implemented.")
+    @property
+    def RESPONSE_CONTENT(self) -> str:
+        return "div.markdown.prose"
     
-    
-    async def extract_message(self, index: int) -> Optional[str]:
-        """Extract ChatGPT message (NOT IMPLEMENTED)."""
-        raise NotImplementedError("ChatGPT support not yet implemented.")
-    
-    
-    async def get_status(self) -> Dict[str, Any]:
-        """Get ChatGPT status (NOT IMPLEMENTED)."""
-        raise NotImplementedError("ChatGPT support not yet implemented.")
-    
-    
-    async def _wait_for_response_complete(self, page: Page, timeout_s: int) -> bool:
-        """Wait for ChatGPT response (NOT IMPLEMENTED)."""
-        raise NotImplementedError("ChatGPT support not yet implemented.")
-    
-    
-    async def _extract_response(
-        self,
-        page: Page,
-        baseline_count: int
-    ) -> Tuple[Optional[str], Optional[str]]:
-        """Extract ChatGPT response (NOT IMPLEMENTED)."""
-        raise NotImplementedError("ChatGPT support not yet implemented.")
-    
+    # =========================
+    # ChatGPT-specific overrides
+    # =========================
     
     async def _ensure_chat_ready(self, page: Page) -> bool:
-        """Ensure ChatGPT chat ready (NOT IMPLEMENTED)."""
-        raise NotImplementedError("ChatGPT support not yet implemented.")
+        """ChatGPT-specific - skip textarea visibility check."""
+        # Navigate to ChatGPT if needed
+        if not page.url.startswith(self.get_base_url()):
+            try:
+                await page.goto(self.get_base_url(), wait_until="domcontentloaded", timeout=10000)
+            except Exception:
+                return False
+        
+        # Just check if textarea exists in DOM (even if hidden)
+        try:
+            textarea = await page.query_selector(self.INPUT_BOX)
+            return textarea is not None
+        except Exception:
+            return False
+    
+    async def _send_message(self, page: Page, message: str) -> bool:
+        """ChatGPT-specific send - handle hidden textarea."""
+        try:
+            # ChatGPT's textarea is hidden - focus and type
+            textarea = await page.query_selector(self.INPUT_BOX)
+            if textarea:
+                await textarea.focus()
+                await page.keyboard.type(message, delay=10)
+                await page.keyboard.press("Enter")
+                return True
+            
+            return False
+        except Exception:
+            return False
 
 
 # Register ChatGPTAI with factory

@@ -3,7 +3,7 @@
 import asyncio
 import time
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple, Dict, Any
+from typing import Optional, Tuple, Dict, Any, List
 from datetime import datetime, timezone
 
 from playwright.async_api import async_playwright, Page, TimeoutError as PWTimeout
@@ -28,7 +28,7 @@ class BaseAI(ABC):
         Get default configuration for this AI.
         
         Returns:
-            Dict with ai_target, base_url, cdp port, etc.
+            Dict with ai_target, base_url, cdp port, max_context_tokens, etc.
         """
         pass
     
@@ -42,14 +42,24 @@ class BaseAI(ABC):
         Initialize base AI.
         
         Args:
-            config: Config dict with 'ai_target' and 'cdp' keys
+            config: Config dict with 'ai_target', 'cdp', and 'max_context_tokens' keys
         """
         self._config = config
         self._debug_enabled = False
         self._cdp_url: Optional[str] = None
         self._cdp_source: Optional[str] = None
-        self._turn_count: int = 0
         self._last_page_url: Optional[str] = None
+        
+        # Persistent session state
+        self._turn_count: int = 0
+        self._token_count: int = 0  # Renamed from _token_estimate for clarity
+        self._message_count: int = 0
+        self._session_start_time: float = time.time()
+        self._last_interaction_time: Optional[float] = None
+        self._message_history: List[Dict[str, Any]] = []
+        
+        # CTAW (Current Active Token Window) size from config
+        self._ctaw_size: int = config.get("max_context_tokens", 200000)
 
     # =========================
     # Public interface (Template Method)
@@ -92,15 +102,46 @@ class BaseAI(ABC):
                 page, message, wait_for_response, timeout_s
             )
             
-            # --- CENTRAlIZED LOGIC ---
+            # --- CENTRALIZED STATE TRACKING ---
             if success:
+                # Increment counters
                 self._turn_count += 1
-                self._debug(f"Turn count incremented to: {self._turn_count}")
+                self._message_count += 1
+                self._last_interaction_time = time.time()
+                
+                # Update token count: (sent + response) / 4
+                sent_chars = len(message)
+                response_chars = len(markdown or snippet or "")
+                tokens_used = (sent_chars + response_chars) // 4
+                self._token_count += tokens_used
+                
+                # Track message in history
+                self._message_history.append({
+                    "turn": self._turn_count,
+                    "timestamp": self._last_interaction_time,
+                    "sent_chars": sent_chars,
+                    "response_chars": response_chars,
+                    "tokens_used": tokens_used,
+                })
+                
+                self._debug(
+                    f"Turn: {self._turn_count}, "
+                    f"Tokens: {self._token_count}, "
+                    f"CTAW: {self.get_ctaw_usage_percent():.1f}%"
+                )
 
             # Add common metadata
             if metadata:
-                 metadata["ws_source"] = ws_source
-                 metadata["timestamp"] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+                metadata.update({
+                    "ws_source": ws_source,
+                    "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+                    "turn_count": self._turn_count,
+                    "message_count": self._message_count,
+                    "token_count": self._token_count,
+                    "ctaw_usage_percent": round(self.get_ctaw_usage_percent(), 2),
+                    "ctaw_size": self._ctaw_size,
+                    "session_duration_s": round(self.get_session_duration_s(), 1),
+                })
 
             return success, snippet, markdown, metadata
             
@@ -155,28 +196,84 @@ class BaseAI(ABC):
         pass
     
     
-    @abstractmethod
+    # =========================
+    # Session state management (implemented in base)
+    # =========================
+    
     async def get_status(self) -> Dict[str, Any]:
         """
         Get current session status.
         
         Returns:
-            Dictionary with:
-            - connected: bool
-            - page_url: str
-            - message_count: int
-            - session_duration_s: float
-            - etc. (AI-specific fields)
+            Dictionary with connection and session state
         """
-        pass
-    
-    # =========================
-    # Public interface (common implementation)
-    # =========================
+        # Ensure CDP info is discovered
+        if self._cdp_url is None:
+            await self._discover_cdp_url()
+        
+        ws_url, ws_source = self.get_cdp_info()
+        
+        return {
+            "ai_target": self._config.get("ai_target", "unknown"),
+            "connected": ws_url is not None,
+            "cdp_source": ws_source,
+            "cdp_url": ws_url,
+            "last_page_url": self._last_page_url,
+            "message_count": self._message_count,
+            "turn_count": self._turn_count,
+            "token_count": self._token_count,
+            "ctaw_size": self._ctaw_size,
+            "ctaw_usage_percent": round(self.get_ctaw_usage_percent(), 2),
+            "session_duration_s": round(self.get_session_duration_s(), 1),
+            "debug_enabled": self._debug_enabled,
+        }
     
     def get_turn_count(self) -> int:
         """Get the current turn count for the session."""
         return self._turn_count
+    
+    def get_message_count(self) -> int:
+        """Get the current message count for the session."""
+        return self._message_count
+    
+    def get_token_count(self) -> int:
+        """Get the current token count for the session."""
+        return self._token_count
+    
+    def get_ctaw_size(self) -> int:
+        """Get the CTAW (context window) size for this AI."""
+        return self._ctaw_size
+    
+    def get_ctaw_usage_percent(self) -> float:
+        """
+        Get the CTAW usage as a percentage.
+        
+        Formula: (TokenCount / CTAWSize) * 100
+        
+        Returns:
+            Percentage (0.0 to 100.0+)
+        """
+        if self._ctaw_size <= 0:
+            return 0.0
+        return (self._token_count / self._ctaw_size) * 100.0
+    
+    def get_session_duration_s(self) -> float:
+        """Get the session duration in seconds since creation."""
+        return time.time() - self._session_start_time
+    
+    def reset_session_state(self) -> None:
+        """
+        Reset all session state (call when starting new chat).
+        
+        This clears turn counter, token counts, and message history.
+        """
+        self._debug("Resetting session state")
+        self._turn_count = 0
+        self._message_count = 0
+        self._token_count = 0
+        self._session_start_time = time.time()
+        self._last_interaction_time = None
+        self._message_history.clear()
 
     def reset_turn_count(self) -> None:
         """Reset the session turn count to 0."""
@@ -204,11 +301,11 @@ class BaseAI(ABC):
     
     
     def get_cdp_port(self) -> int:
-        """Get CDP port from config (default 9222)."""
+        """Get CDP port from config (default 9223)."""
         try:
-            return int(self._config.get("cdp", {}).get("port", 9222))
+            return int(self._config.get("cdp", {}).get("port", 9223))
         except Exception:
-            return 9222
+            return 9223
             
     def get_base_url(self) -> str:
         """Helper to get base_url from config."""
@@ -354,5 +451,18 @@ class BaseAI(ABC):
             
         Returns:
             True if chat is ready, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    async def start_new_session(self, page: Page) -> bool:
+        """
+        Start a new chat session/conversation (AI-specific implementation).
+
+        Args:
+            page: Playwright page object targeting this AI's website.
+
+        Returns:
+            True if a new session was started successfully, False otherwise.
         """
         pass
