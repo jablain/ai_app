@@ -1,7 +1,7 @@
 ================================================================================
 AI-CLI-BRIDGE v2.0.0 - COMPLETE SOURCE CODE DUMP
 ================================================================================
-Generated: Sun Oct 19 11:02:56 PM EDT 2025
+Generated: Mon Oct 20 02:37:00 PM EDT 2025
 Project Root: /home/jacques/dev/ai_app/ai-cli-bridge
 ================================================================================
 
@@ -56,73 +56,196 @@ Project Root: /home/jacques/dev/ai_app/ai-cli-bridge
 FILE: src/ai_cli_bridge/ai/base.py
 ================================================================================
 
-"""Abstract base class for AI browser automation."""
+"""Abstract base class for AI interactions.
 
-import asyncio
+This module defines the pure interface for interacting with AI systems,
+completely independent of any transport mechanism (web, API, etc.).
+"""
+
+import logging
 import time
 from abc import ABC, abstractmethod
-from typing import Optional, Tuple, Dict, Any, List
+from typing import Optional, Tuple, Dict, Any, List, TypedDict
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 
-from playwright.async_api import async_playwright, Page, TimeoutError as PWTimeout
+try:
+    import tiktoken
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+
+# =========================
+# Type Definitions
+# =========================
+
+class AIConfig(TypedDict, total=False):
+    """Configuration dictionary for AI instances."""
+    ai_target: str
+    max_context_tokens: int
+    base_url: str  # For web-based AIs
+    cdp: dict      # For web-based AIs
+
+class AIStatus(TypedDict):
+    """AI status dictionary structure."""
+    ai_target: str
+    turn_count: int
+    token_count: int
+    message_count: int
+    session_duration_s: float
+    last_interaction_time: Optional[float]
+    ctaw_size: int
+    ctaw_usage_percent: float
+
+# =========================
+# Session State
+# =========================
+
+@dataclass
+class SessionState:
+    """
+    Encapsulates all session tracking state.
+    
+    This is implementation-agnostic - tracks logical operations
+    without knowing HOW they're performed. Fully self-contained
+    with its own CTAW tracking and usage calculation.
+    """
+    turn_count: int = 0
+    token_count: int = 0
+    message_count: int = 0
+    ctaw_size: int = 200000  # Default, overridden by config
+    session_start_time: float = field(default_factory=time.time)
+    last_interaction_time: Optional[float] = None
+    message_history: List[Dict[str, Any]] = field(default_factory=list)
+    
+    def add_message(self, sent_tokens: int, response_tokens: int) -> int:
+        """
+        Record a message exchange and return tokens used.
+        
+        Args:
+            sent_tokens: Token count of sent message
+            response_tokens: Token count of response
+            
+        Returns:
+            Total tokens used in this exchange
+        """
+        self.turn_count += 1
+        self.message_count += 1
+        self.last_interaction_time = time.time()
+        
+        tokens_used = sent_tokens + response_tokens
+        self.token_count += tokens_used
+        
+        self.message_history.append({
+            "turn": self.turn_count,
+            "timestamp": self.last_interaction_time,
+            "sent_tokens": sent_tokens,
+            "response_tokens": response_tokens,
+            "tokens_used": tokens_used,
+        })
+        
+        return tokens_used
+    
+    def reset(self) -> None:
+        """Reset all state for a new session."""
+        self.turn_count = 0
+        self.token_count = 0
+        self.message_count = 0
+        self.session_start_time = time.time()
+        self.last_interaction_time = None
+        self.message_history.clear()
+    
+    def get_duration_s(self) -> float:
+        """Get session duration in seconds."""
+        return time.time() - self.session_start_time
+    
+    def get_ctaw_usage_percent(self) -> float:
+        """
+        Calculate CTAW usage as a percentage.
+        
+        Formula: (TokenCount / CTAWSize) * 100
+        
+        Returns:
+            Percentage (0.0 to 100.0+)
+        """
+        if self.ctaw_size <= 0:
+            return 0.0
+        return (self.token_count / self.ctaw_size) * 100.0
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Export state as dictionary for status reporting."""
+        return {
+            "turn_count": self.turn_count,
+            "token_count": self.token_count,
+            "message_count": self.message_count,
+            "session_duration_s": round(self.get_duration_s(), 1),
+            "last_interaction_time": self.last_interaction_time,
+            "ctaw_size": self.ctaw_size,
+            "ctaw_usage_percent": round(self.get_ctaw_usage_percent(), 2),
+        }
+
+# =========================
+# Base AI Class
+# =========================
 
 class BaseAI(ABC):
     """
-    Abstract base class for AI-specific browser automation.
+    Pure abstract base class for AI interactions.
     
-    Defines the public interface and common implementation for all AI targets.
-    Each concrete AI class (ClaudeAI, ChatGPTAI, etc.) must implement
-    the abstract methods with AI-specific logic.
+    Defines WHAT operations are possible with an AI system,
+    without specifying HOW they're implemented.
+    
+    Key Principles:
+    - No references to transport mechanisms (CDP, HTTP, WebSocket, etc.)
+    - No references to implementation details (Playwright, browsers, etc.)
+    - Only logical AI operations (send message, list messages, etc.)
+    - Session state tracking is implementation-agnostic
+    
+    Subclasses implement specific transport mechanisms:
+    - WebAIBase: Browser automation via Playwright/CDP
+    - APIAIBase: Direct API calls via HTTP (future)
     """
-    
-    # =========================
-    # Class-level configuration
-    # =========================
-    
-    @classmethod
-    @abstractmethod
-    def get_default_config(cls) -> Dict[str, Any]:
-        """
-        Get default configuration for this AI.
-        
-        Returns:
-            Dict with ai_target, base_url, cdp port, max_context_tokens, etc.
-        """
-        pass
-    
-    
-    # =========================
-    # Common state (shared by all AIs)
-    # =========================
     
     def __init__(self, config: Dict[str, Any]):
         """
         Initialize base AI.
         
         Args:
-            config: Config dict with 'ai_target', 'cdp', and 'max_context_tokens' keys
+            config: Configuration dict with required fields:
+                - ai_target: AI identifier (e.g., 'claude', 'chatgpt')
+                - max_context_tokens: Context window size
+        
+        Raises:
+            ValueError: If required config fields are missing
         """
+        # Validate required config fields
+        if "ai_target" not in config:
+            raise ValueError("Config must include 'ai_target'")
+        if "max_context_tokens" not in config:
+            raise ValueError("Config must include 'max_context_tokens'")
+        
         self._config = config
-        self._debug_enabled = False
-        self._cdp_url: Optional[str] = None
-        self._cdp_source: Optional[str] = None
-        self._last_page_url: Optional[str] = None
         
-        # Persistent session state
-        self._turn_count: int = 0
-        self._token_count: int = 0  # Renamed from _token_estimate for clarity
-        self._message_count: int = 0
-        self._session_start_time: float = time.time()
-        self._last_interaction_time: Optional[float] = None
-        self._message_history: List[Dict[str, Any]] = []
+        # Set up logging
+        self._logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
         
-        # CTAW (Current Active Token Window) size from config
-        self._ctaw_size: int = config.get("max_context_tokens", 200000)
-
+        # Initialize session state with CTAW size from config
+        self._session = SessionState(ctaw_size=config["max_context_tokens"])
+        
+        # Set up tokenizer (tiktoken if available, fallback to char/4)
+        self._tokenizer = None
+        if TIKTOKEN_AVAILABLE:
+            try:
+                self._tokenizer = tiktoken.get_encoding("cl100k_base")
+                self._logger.debug("Initialized tiktoken tokenizer")
+            except Exception as e:
+                self._logger.warning(f"Failed to initialize tiktoken: {e}")
+    
     # =========================
-    # Public interface (Template Method)
+    # Core AI Operations (Abstract Interface)
     # =========================
     
+    @abstractmethod
     async def send_prompt(
         self,
         message: str,
@@ -130,115 +253,38 @@ class BaseAI(ABC):
         timeout_s: int = 120
     ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
         """
-        Public method to send a prompt using the Template Method Pattern.
-        Handles connection, page selection, and cleanup, then calls the
-        subclass-specific implementation.
-        """
-        ws_url, ws_source = await self._discover_cdp_url()
-        if not ws_url:
-            self._debug(f"CDP discovery failed: {ws_source}")
-            return False, None, None, {"error": "no_cdp", "source": ws_source}
-            
-        self._debug(f"CDP connected via {ws_source}: {ws_url}")
+        Send a message to the AI and optionally wait for response.
         
-        pw = await async_playwright().start()
-        remote = None
+        This is the primary interaction method. Subclasses implement
+        the actual transport mechanism (web automation, API call, etc.).
         
-        try:
-            remote = await pw.chromium.connect_over_cdp(ws_url)
-            page = await self._pick_page(remote, self.get_base_url())
+        Args:
+            message: Text to send to the AI
+            wait_for_response: Whether to wait for AI's reply
+            timeout_s: Maximum time to wait for response
             
-            if not page:
-                self._debug("No suitable page found")
-                return False, None, None, {"error": "no_page"}
-                
-            self._last_page_url = page.url
-            self._debug(f"Operating on page: {page.url}")
-            
-            # Call the subclass-specific implementation
-            success, snippet, markdown, metadata = await self._execute_interaction(
-                page, message, wait_for_response, timeout_s
-            )
-            
-            # --- CENTRALIZED STATE TRACKING ---
-            if success:
-                # Increment counters
-                self._turn_count += 1
-                self._message_count += 1
-                self._last_interaction_time = time.time()
-                
-                # Update token count: (sent + response) / 4
-                sent_chars = len(message)
-                response_chars = len(markdown or snippet or "")
-                tokens_used = (sent_chars + response_chars) // 4
-                self._token_count += tokens_used
-                
-                # Track message in history
-                self._message_history.append({
-                    "turn": self._turn_count,
-                    "timestamp": self._last_interaction_time,
-                    "sent_chars": sent_chars,
-                    "response_chars": response_chars,
-                    "tokens_used": tokens_used,
-                })
-                
-                self._debug(
-                    f"Turn: {self._turn_count}, "
-                    f"Tokens: {self._token_count}, "
-                    f"CTAW: {self.get_ctaw_usage_percent():.1f}%"
-                )
-
-            # Add common metadata
-            if metadata:
-                metadata.update({
-                    "ws_source": ws_source,
-                    "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
-                    "turn_count": self._turn_count,
-                    "message_count": self._message_count,
-                    "token_count": self._token_count,
-                    "ctaw_usage_percent": round(self.get_ctaw_usage_percent(), 2),
-                    "ctaw_size": self._ctaw_size,
-                    "session_duration_s": round(self.get_session_duration_s(), 1),
-                })
-
-            return success, snippet, markdown, metadata
-            
-        finally:
-            if remote: await remote.close()
-            await pw.stop()
-
-    # =========================
-    # Abstract methods (to be implemented by subclasses)
-    # =========================
-
-    @abstractmethod
-    async def _execute_interaction(
-        self,
-        page: Page,
-        message: str,
-        wait_for_response: bool,
-        timeout_s: int
-    ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
-        """
-        Subclass-specific implementation for the core AI interaction.
-        This method is called by the public send_prompt method.
+        Returns:
+            Tuple of (success, snippet, full_response, metadata)
+            - success: True if message was sent (and response received if waiting)
+            - snippet: First ~280 chars of response (for display)
+            - full_response: Complete response text/markdown
+            - metadata: Dict with timing, token usage, etc.
         """
         pass
-        
+    
     @abstractmethod
-    async def list_messages(self) -> list[Dict[str, Any]]:
+    async def list_messages(self) -> List[Dict[str, Any]]:
         """
         List all messages in the current conversation.
         
         Returns:
             List of message dictionaries with keys:
-            - index: int
+            - index: int (0-based)
             - type: 'user' | 'assistant' | 'system'
             - preview: str (first ~60 chars)
             - length: int (character count)
         """
         pass
-    
     
     @abstractmethod
     async def extract_message(self, index: int) -> Optional[str]:
@@ -246,282 +292,167 @@ class BaseAI(ABC):
         Extract the full content of a specific message.
         
         Args:
-            index: Message index (from list_messages)
+            index: Message index from list_messages()
             
         Returns:
             Full message content or None if not found
         """
         pass
     
-    
-    # =========================
-    # Session state management (implemented in base)
-    # =========================
-    
-    async def get_status(self) -> Dict[str, Any]:
+    @abstractmethod
+    async def start_new_session(self) -> bool:
         """
-        Get current session status.
+        Start a new chat session/conversation.
+        
+        This resets the conversation history in the AI interface
+        and resets local session state tracking.
         
         Returns:
-            Dictionary with connection and session state
+            True if new session started successfully
         """
-        # Ensure CDP info is discovered
-        if self._cdp_url is None:
-            await self._discover_cdp_url()
+        pass
+    
+    @abstractmethod
+    def get_transport_status(self) -> Dict[str, Any]:
+        """
+        Get transport/connection status.
         
-        ws_url, ws_source = self.get_cdp_info()
+        This is implementation-specific (web has CDP info, API has endpoint info).
+        Subclasses must implement this to provide transport-layer details.
         
+        Returns:
+            Dictionary with transport-specific status information
+        """
+        pass
+    
+    # =========================
+    # AI Status (Concrete Implementation)
+    # =========================
+    
+    def get_ai_status(self) -> AIStatus:
+        """
+        Get AI session status (implementation-agnostic).
+        
+        Returns universal AI metrics that apply regardless of
+        transport mechanism (web, API, etc.).
+        
+        Returns:
+            Dictionary with AI session information
+        """
         return {
-            "ai_target": self._config.get("ai_target", "unknown"),
-            "connected": ws_url is not None,
-            "cdp_source": ws_source,
-            "cdp_url": ws_url,
-            "last_page_url": self._last_page_url,
-            "message_count": self._message_count,
-            "turn_count": self._turn_count,
-            "token_count": self._token_count,
-            "ctaw_size": self._ctaw_size,
-            "ctaw_usage_percent": round(self.get_ctaw_usage_percent(), 2),
-            "session_duration_s": round(self.get_session_duration_s(), 1),
-            "debug_enabled": self._debug_enabled,
+            "ai_target": self.get_ai_target(),
+            **self._session.to_dict(),
         }
     
-    def get_turn_count(self) -> int:
-        """Get the current turn count for the session."""
-        return self._turn_count
+    def get_ai_target(self) -> str:
+        """Get the AI target name (e.g., 'claude', 'chatgpt')."""
+        return self._config.get("ai_target", "unknown")
     
-    def get_message_count(self) -> int:
-        """Get the current message count for the session."""
-        return self._message_count
+    # =========================
+    # Token Counting
+    # =========================
     
-    def get_token_count(self) -> int:
-        """Get the current token count for the session."""
-        return self._token_count
-    
-    def get_ctaw_size(self) -> int:
-        """Get the CTAW (context window) size for this AI."""
-        return self._ctaw_size
-    
-    def get_ctaw_usage_percent(self) -> float:
+    def _count_tokens(self, text: str) -> int:
         """
-        Get the CTAW usage as a percentage.
+        Count tokens in text using tiktoken or fallback.
         
-        Formula: (TokenCount / CTAWSize) * 100
-        
+        Args:
+            text: Text to count tokens in
+            
         Returns:
-            Percentage (0.0 to 100.0+)
+            Token count
         """
-        if self._ctaw_size <= 0:
-            return 0.0
-        return (self._token_count / self._ctaw_size) * 100.0
+        if self._tokenizer:
+            try:
+                return len(self._tokenizer.encode(text))
+            except Exception as e:
+                self._logger.warning(f"Token counting failed: {e}")
+        
+        # Fallback: 4 chars ≈ 1 token
+        return len(text) // 4
     
-    def get_session_duration_s(self) -> float:
-        """Get the session duration in seconds since creation."""
-        return time.time() - self._session_start_time
+    # =========================
+    # Protected Helpers for Subclasses
+    # =========================
     
-    def reset_session_state(self) -> None:
+    def _update_session_from_interaction(
+        self,
+        message: str,
+        response: str
+    ) -> Dict[str, Any]:
         """
-        Reset all session state (call when starting new chat).
+        Update session state after a successful interaction.
+        
+        This is a helper method for subclasses to call after they've
+        successfully completed a send_prompt operation. Returns metadata
+        to be merged with transport-specific metadata.
+        
+        Args:
+            message: The sent message
+            response: The received response
+            
+        Returns:
+            Metadata dict with session information
+        """
+        # Count tokens
+        sent_tokens = self._count_tokens(message)
+        response_tokens = self._count_tokens(response)
+        
+        # Update session state
+        tokens_used = self._session.add_message(sent_tokens, response_tokens)
+        
+        # Build metadata
+        metadata = {
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "turn_count": self._session.turn_count,
+            "message_count": self._session.message_count,
+            "token_count": self._session.token_count,
+            "tokens_used": tokens_used,
+            "sent_tokens": sent_tokens,
+            "response_tokens": response_tokens,
+            "ctaw_usage_percent": round(self._session.get_ctaw_usage_percent(), 2),
+            "ctaw_size": self._session.ctaw_size,
+            "session_duration_s": round(self._session.get_duration_s(), 1),
+        }
+        
+        self._logger.debug(
+            f"Turn: {self._session.turn_count}, "
+            f"Tokens: {self._session.token_count}, "
+            f"CTAW: {self._session.get_ctaw_usage_percent():.1f}%"
+        )
+        
+        return metadata
+    
+    def _reset_session_state(self) -> None:
+        """
+        Reset all session state (private - called by start_new_session).
         
         This clears turn counter, token counts, and message history.
+        Should only be called from start_new_session() implementation.
         """
-        self._debug("Resetting session state")
-        self._turn_count = 0
-        self._message_count = 0
-        self._token_count = 0
-        self._session_start_time = time.time()
-        self._last_interaction_time = None
-        self._message_history.clear()
-
-    def reset_turn_count(self) -> None:
-        """Reset the session turn count to 0."""
-        self._debug("Turn count reset to 0.")
-        self._turn_count = 0
-        
-    def set_debug(self, enabled: bool) -> None:
-        """Enable or disable debug output."""
-        self._debug_enabled = enabled
-    
-    
-    def get_debug(self) -> bool:
-        """Get current debug state."""
-        return self._debug_enabled
-    
-    
-    def get_cdp_info(self) -> Tuple[Optional[str], Optional[str]]:
-        """
-        Get CDP connection information.
-        
-        Returns:
-            Tuple of (ws_url, source) where source is 'env'|'discovered'|'none'
-        """
-        return self._cdp_url, self._cdp_source
-    
-    
-    def get_cdp_port(self) -> int:
-        """Get CDP port from config (default 9223)."""
-        try:
-            return int(self._config.get("cdp", {}).get("port", 9223))
-        except Exception:
-            return 9223
-            
-    def get_base_url(self) -> str:
-        """Helper to get base_url from config."""
-        return self._config.get("base_url", "")
-    
+        self._logger.info("Resetting session state")
+        self._session.reset()
     
     # =========================
-    # Protected helpers (available to subclasses)
+    # Configuration Access
     # =========================
     
-    def _debug(self, msg: str) -> None:
-        """Print debug message if debugging is enabled."""
-        if self._debug_enabled:
-            print(f"[{self.__class__.__name__}] {msg}")
-    
+    def get_config(self) -> Dict[str, Any]:
+        """Get the full configuration dictionary."""
+        return self._config
     
     # =========================
-    # Template methods (can be overridden by subclasses)
+    # Class-level Configuration
     # =========================
     
-    async def _discover_cdp_url(self) -> Tuple[Optional[str], str]:
-        """
-        Discover CDP WebSocket URL.
-        
-        Default implementation checks:
-        1. Environment variable AI_CLI_BRIDGE_CDP_URL
-        2. HTTP probe to http://127.0.0.1:<port>/json/version
-        
-        Subclasses can override for custom discovery logic.
-        
-        Returns:
-            Tuple of (ws_url or None, source: 'env'|'discovered'|'none')
-        """
-        import os
-        from urllib.request import urlopen
-        from urllib.error import URLError, HTTPError
-        import json
-        
-        # Check environment variable
-        env = (os.environ.get("AI_CLI_BRIDGE_CDP_URL") or "").strip()
-        if env.startswith(("ws://", "wss://")) and "/devtools/browser/" in env:
-            self._cdp_url = env
-            self._cdp_source = "env"
-            return env, "env"
-        
-        # Probe HTTP endpoint
-        port = self.get_cdp_port()
-        
-        url = f"http://127.0.0.1:{port}/json/version"
-        try:
-            with urlopen(url, timeout=2.0) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-                ws = (data.get("webSocketDebuggerUrl") or "").strip()
-                if ws.startswith(("ws://", "wss://")) and "/devtools/browser/" in ws:
-                    self._cdp_url = ws
-                    self._cdp_source = "discovered"
-                    return ws, "discovered"
-        except (URLError, HTTPError, TimeoutError, ValueError, json.JSONDecodeError):
-            pass
-        
-        self._cdp_url = None
-        self._cdp_source = "none"
-        return None, "none"
-    
-    
-    async def _pick_page(self, remote, base_url: Optional[str]):
-        """
-        Pick a page from browser contexts.
-        
-        Default implementation prefers pages matching base_url, else first page.
-        
-        Args:
-            remote: Playwright browser instance connected via CDP
-            base_url: Preferred base URL to match
-            
-        Returns:
-            Page object or None
-        """
-        try:
-            contexts = getattr(remote, "contexts", []) or []
-            pages = []
-            for ctx in contexts:
-                pages.extend(getattr(ctx, "pages", []) or [])
-            
-            if base_url:
-                for p in pages:
-                    try:
-                        if (p.url or "").startswith(base_url):
-                            return p
-                    except Exception:
-                        continue
-            
-            return pages[0] if pages else None
-        except Exception:
-            return None
-    
-    
-    # =========================
-    # AI-specific methods (must be implemented by subclasses)
-    # =========================
-    
+    @classmethod
     @abstractmethod
-    async def _wait_for_response_complete(self, page: Page, timeout_s: int) -> bool:
+    def get_default_config(cls) -> Dict[str, Any]:
         """
-        Wait for AI response to complete (AI-specific implementation).
+        Get default configuration for this AI implementation.
         
-        Args:
-            page: Playwright page object
-            timeout_s: Maximum time to wait
-            
         Returns:
-            True if completion detected, False on timeout
-        """
-        pass
-    
-    
-    @abstractmethod
-    async def _extract_response(
-        self,
-        page: Page,
-        baseline_count: int
-    ) -> Tuple[Optional[str], Optional[str]]:
-        """
-        Extract the last AI response from the page (AI-specific implementation).
-        
-        Args:
-            page: Playwright page object
-            baseline_count: Number of responses before sending prompt
-            
-        Returns:
-            Tuple of (snippet, full_markdown) or (None, None)
-        """
-        pass
-    
-    
-    @abstractmethod
-    async def _ensure_chat_ready(self, page: Page) -> bool:
-        """
-        Ensure the chat interface is ready for input (AI-specific implementation).
-        
-        Args:
-            page: Playwright page object
-            
-        Returns:
-            True if chat is ready, False otherwise
-        """
-        pass
-
-    @abstractmethod
-    async def start_new_session(self, page: Page) -> bool:
-        """
-        Start a new chat session/conversation (AI-specific implementation).
-
-        Args:
-            page: Playwright page object targeting this AI's website.
-
-        Returns:
-            True if a new session was started successfully, False otherwise.
+            Dict with ai_target, max_context_tokens, and implementation-specific settings
         """
         pass
 
@@ -533,9 +464,7 @@ FILE: src/ai_cli_bridge/ai/chatgpt.py
 """ChatGPT-specific AI implementation."""
 
 from typing import Dict, Any
-
 from playwright.async_api import Page
-
 from .web_base import WebAIBase
 from .factory import AIFactory
 
@@ -548,7 +477,6 @@ class ChatGPTAI(WebAIBase):
     # =========================
     
     BASE_URL = "https://chatgpt.com"
-    #BASE_URL = "https://chat.openai.com"
     CDP_PORT = 9223
     
     @classmethod
@@ -592,17 +520,19 @@ class ChatGPTAI(WebAIBase):
     async def _ensure_chat_ready(self, page: Page) -> bool:
         """ChatGPT-specific - skip textarea visibility check."""
         # Navigate to ChatGPT if needed
-        if not page.url.startswith(self.get_base_url()):
+        if not page.url.startswith(self._get_base_url()):
             try:
-                await page.goto(self.get_base_url(), wait_until="domcontentloaded", timeout=10000)
-            except Exception:
+                await page.goto(self._get_base_url(), wait_until="domcontentloaded", timeout=10000)
+            except Exception as e:
+                self._logger.error(f"Navigation failed: {e}")
                 return False
         
         # Just check if textarea exists in DOM (even if hidden)
         try:
             textarea = await page.query_selector(self.INPUT_BOX)
             return textarea is not None
-        except Exception:
+        except Exception as e:
+            self._logger.error(f"Input box check failed: {e}")
             return False
     
     async def _send_message(self, page: Page, message: str) -> bool:
@@ -617,7 +547,8 @@ class ChatGPTAI(WebAIBase):
                 return True
             
             return False
-        except Exception:
+        except Exception as e:
+            self._logger.error(f"Failed to send message: {e}")
             return False
 
 
@@ -632,7 +563,6 @@ FILE: src/ai_cli_bridge/ai/claude.py
 """Claude-specific AI implementation."""
 
 from typing import Dict, Any
-
 from .web_base import WebAIBase
 from .factory import AIFactory
 
@@ -822,7 +752,6 @@ FILE: src/ai_cli_bridge/ai/gemini.py
 """Gemini-specific AI implementation."""
 
 from typing import Dict, Any
-
 from .web_base import WebAIBase
 from .factory import AIFactory
 
@@ -897,14 +826,18 @@ __all__ = ["BaseAI", "AIFactory", "ClaudeAI", "ChatGPTAI", "GeminiAI"]
 FILE: src/ai_cli_bridge/ai/web_base.py
 ================================================================================
 
-"""Base class for web-based AIs using the stop-button pattern."""
+"""Base class for web-based AIs using browser automation.
+
+This module implements the BaseAI interface using Playwright and CDP
+for browser automation. All web/browser-specific logic lives here.
+"""
 
 import asyncio
 import time
 from abc import abstractmethod
 from typing import Optional, Tuple, Dict, Any
 
-from playwright.async_api import Page, TimeoutError as PWTimeout
+from playwright.async_api import Page, Browser, TimeoutError as PWTimeout
 from .base import BaseAI
 
 try:
@@ -913,17 +846,82 @@ except ImportError:
     markdownify = None
 
 
+class BrowserConnectionPool:
+    """
+    Manages persistent Playwright browser connections.
+    
+    This should be created once at the daemon level and injected
+    into WebAIBase instances to enable connection reuse.
+    Includes connection health checks for reliability.
+    """
+    
+    def __init__(self):
+        self._playwright = None
+        self._connections: Dict[str, Browser] = {}
+        self._lock = asyncio.Lock()
+    
+    async def get_connection(self, ws_url: str) -> Browser:
+        """
+        Get or create a browser connection to the given CDP URL.
+        
+        Includes health check to detect and recover from stale connections.
+        
+        Args:
+            ws_url: WebSocket URL for CDP connection
+            
+        Returns:
+            Connected browser instance
+        """
+        async with self._lock:
+            # Lazy-initialize Playwright
+            if not self._playwright:
+                from playwright.async_api import async_playwright
+                self._playwright = await async_playwright().start()
+            
+            # Check if we have an existing connection
+            browser = self._connections.get(ws_url)
+            
+            if browser:
+                # Health check: verify connection is alive
+                try:
+                    _ = browser.contexts
+                    return browser
+                except Exception:
+                    # Connection is dead, remove it
+                    del self._connections[ws_url]
+            
+            # Create new connection
+            browser = await self._playwright.chromium.connect_over_cdp(ws_url)
+            self._connections[ws_url] = browser
+            return browser
+    
+    async def close_all(self):
+        """Close all connections and stop Playwright."""
+        for browser in self._connections.values():
+            try:
+                await browser.close()
+            except Exception:
+                pass  # Ignore errors during cleanup
+        self._connections.clear()
+        
+        if self._playwright:
+            await self._playwright.stop()
+            self._playwright = None
+
+
 class WebAIBase(BaseAI):
     """
-    Base class for web-based AI interfaces that follow the stop-button pattern.
+    Base class for AI implementations using web browser automation.
     
-    This covers AIs like Claude and Gemini that:
-    - Use contenteditable input boxes
-    - Show a "Stop" button during response generation
-    - Hide the button when complete
-    - Extract responses from markdown containers
+    This class adds all web-specific concepts:
+    - CDP (Chrome DevTools Protocol) discovery and connection
+    - Playwright browser/page management
+    - DOM interaction (selectors, waiting, extraction)
+    - Page navigation
     
-    Subclasses must define selectors and AI-specific logic.
+    Subclasses must define:
+    - Selector properties (INPUT_BOX, STOP_BUTTON, etc.)
+    - AI-specific interaction logic (via overrides if needed)
     """
     
     # =========================
@@ -935,8 +933,296 @@ class WebAIBase(BaseAI):
     SNIPPET_LENGTH = 280
     SNIPPET_TRIM_WINDOW = 40
     
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize web-based AI.
+        
+        Args:
+            config: Configuration dict with web-specific settings:
+                - base_url: AI website URL
+                - cdp: CDP configuration (port, etc.)
+                - selectors: DOM selector configuration (optional)
+        """
+        super().__init__(config)
+        
+        # Web-specific state
+        self._cdp_url: Optional[str] = None
+        self._cdp_source: Optional[str] = None
+        self._last_page_url: Optional[str] = None
+        
+        # CDP URL caching (60 second TTL)
+        self._cdp_cache: Optional[Tuple[str, str]] = None
+        self._cdp_cache_time: float = 0
+        self._cdp_cache_ttl: int = 60  # seconds
+        
+        # Browser connection pool (injected by daemon)
+        self._browser_pool: Optional[BrowserConnectionPool] = None
+    
     # =========================
-    # Abstract selectors (must be defined by subclass)
+    # Dependency Injection
+    # =========================
+    
+    def set_browser_pool(self, pool: BrowserConnectionPool) -> None:
+        """
+        Inject the browser connection pool.
+        
+        This should be called by the daemon after creating the AI instance.
+        
+        Args:
+            pool: Shared BrowserConnectionPool instance
+        """
+        self._browser_pool = pool
+    
+    # =========================
+    # Implementation of BaseAI Interface
+    # =========================
+    
+    async def send_prompt(
+        self,
+        message: str,
+        wait_for_response: bool = True,
+        timeout_s: int = 120
+    ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
+        """
+        Web implementation of send_prompt using browser automation.
+        
+        Flow:
+        1. Discover/connect to browser via CDP (with caching)
+        2. Get appropriate page from browser
+        3. Execute web-specific interaction (type, click, wait)
+        4. Extract response from DOM
+        5. Update session state
+        
+        Args:
+            message: Text to send to the AI
+            wait_for_response: Whether to wait for AI's reply
+            timeout_s: Maximum time to wait for response
+            
+        Returns:
+            Tuple of (success, snippet, full_response, metadata)
+        """
+        # Step 1: CDP Discovery (with caching)
+        ws_url, ws_source = await self._get_cdp_url()
+        if not ws_url:
+            self._logger.error(f"CDP discovery failed: {ws_source}")
+            return False, None, None, {"error": "no_cdp", "source": ws_source}
+        
+        self._logger.debug(f"CDP connected via {ws_source}: {ws_url}")
+        
+        # Step 2: Browser Connection
+        if not self._browser_pool:
+            self._logger.error("No browser pool configured")
+            return False, None, None, {"error": "no_browser_pool"}
+        
+        try:
+            browser = await self._browser_pool.get_connection(ws_url)
+            page = await self._pick_page(browser, self._get_base_url())
+            
+            if not page:
+                self._logger.error("No suitable page found")
+                return False, None, None, {"error": "no_page"}
+            
+            self._last_page_url = page.url
+            self._logger.debug(f"Operating on page: {page.url}")
+            
+            # Step 3: Execute Web Interaction
+            success, snippet, markdown, metadata = await self._execute_web_interaction(
+                page, message, wait_for_response, timeout_s
+            )
+            
+            # Step 4: Update Session State
+            if success and markdown:
+                session_metadata = self._update_session_from_interaction(message, markdown)
+                metadata.update(session_metadata)
+            
+            # Add web-specific metadata
+            if metadata:
+                metadata["ws_source"] = ws_source
+                metadata["page_url"] = page.url
+            
+            return success, snippet, markdown, metadata
+            
+        except Exception as e:
+            self._logger.error(f"Error in send_prompt: {e}", exc_info=True)
+            return False, None, None, {"error": "exception", "message": str(e)}
+    
+    def get_transport_status(self) -> Dict[str, Any]:
+        """
+        Get web transport status.
+        
+        Returns connection details specific to web automation.
+        
+        Returns:
+            Dictionary with web transport information
+        """
+        return {
+            "transport_type": "web",
+            "connected": self._cdp_url is not None,
+            "cdp_url": self._cdp_url,
+            "cdp_source": self._cdp_source,
+            "last_page_url": self._last_page_url,
+        }
+    
+    async def start_new_session(self) -> bool:
+        """
+        Start a new chat session (web implementation).
+        
+        Uses the current browser connection to click the "new chat" button
+        and resets the session state.
+        
+        Returns:
+            True if new session started successfully
+        """
+        try:
+            # Get current browser connection
+            ws_url, _ = await self._get_cdp_url()
+            if not ws_url or not self._browser_pool:
+                self._logger.error("Cannot start new session: no browser connection")
+                return False
+            
+            browser = await self._browser_pool.get_connection(ws_url)
+            page = await self._pick_page(browser, self._get_base_url())
+            
+            if not page:
+                self._logger.error("Cannot start new session: no page found")
+                return False
+            
+            # Click new chat button
+            button = page.locator(self.NEW_CHAT_BUTTON).first
+            await button.wait_for(state="visible", timeout=5000)
+            await button.click()
+            
+            # Wait for input box to be ready
+            await page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
+            
+            # Reset session state
+            self._reset_session_state()
+            
+            self._logger.info("Started new session successfully")
+            return True
+            
+        except Exception as e:
+            self._logger.error(f"Failed to start new session: {e}", exc_info=True)
+            return False
+    
+    # =========================
+    # CDP Discovery & Connection (with Caching)
+    # =========================
+    
+    async def _get_cdp_url(self) -> Tuple[Optional[str], str]:
+        """
+        Get CDP URL with caching to reduce HTTP probes.
+        
+        Cache is valid for 60 seconds, then re-discovered.
+        
+        Returns:
+            Tuple of (ws_url or None, source: 'env'|'discovered'|'none')
+        """
+        now = time.time()
+        
+        # Return cached value if still valid
+        if self._cdp_cache and (now - self._cdp_cache_time) < self._cdp_cache_ttl:
+            return self._cdp_cache
+        
+        # Cache expired or not present, discover CDP URL
+        result = await self._discover_cdp_url()
+        self._cdp_cache = result
+        self._cdp_cache_time = now
+        
+        return result
+    
+    async def _discover_cdp_url(self) -> Tuple[Optional[str], str]:
+        """
+        Discover CDP WebSocket URL.
+        
+        Checks:
+        1. Environment variable AI_CLI_BRIDGE_CDP_URL
+        2. HTTP probe to http://127.0.0.1:<port>/json/version
+        
+        Returns:
+            Tuple of (ws_url or None, source: 'env'|'discovered'|'none')
+        """
+        import os
+        from urllib.request import urlopen
+        from urllib.error import URLError, HTTPError
+        import json
+        
+        # Check environment variable
+        env = (os.environ.get("AI_CLI_BRIDGE_CDP_URL") or "").strip()
+        if env.startswith(("ws://", "wss://")) and "/devtools/browser/" in env:
+            self._cdp_url = env
+            self._cdp_source = "env"
+            self._logger.debug(f"CDP URL from environment: {env}")
+            return env, "env"
+        
+        # Probe HTTP endpoint
+        port = self._get_cdp_port()
+        url = f"http://127.0.0.1:{port}/json/version"
+        
+        try:
+            with urlopen(url, timeout=2.0) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+                ws = (data.get("webSocketDebuggerUrl") or "").strip()
+                if ws.startswith(("ws://", "wss://")) and "/devtools/browser/" in ws:
+                    self._cdp_url = ws
+                    self._cdp_source = "discovered"
+                    self._logger.debug(f"CDP URL discovered: {ws}")
+                    return ws, "discovered"
+        except (URLError, HTTPError, TimeoutError, ValueError, json.JSONDecodeError) as e:
+            self._logger.warning(f"CDP discovery failed: {e}")
+        
+        self._cdp_url = None
+        self._cdp_source = "none"
+        return None, "none"
+    
+    async def _pick_page(self, browser: Browser, base_url: Optional[str]) -> Optional[Page]:
+        """
+        Pick a page from browser contexts.
+        
+        Prefers pages matching base_url, else returns first page.
+        
+        Args:
+            browser: Playwright browser instance
+            base_url: Preferred base URL to match
+            
+        Returns:
+            Page object or None
+        """
+        try:
+            contexts = getattr(browser, "contexts", []) or []
+            pages = []
+            for ctx in contexts:
+                pages.extend(getattr(ctx, "pages", []) or [])
+            
+            if base_url:
+                for p in pages:
+                    try:
+                        if (p.url or "").startswith(base_url):
+                            return p
+                    except Exception:
+                        continue
+            
+            return pages[0] if pages else None
+        except Exception:
+            return None
+    
+    # =========================
+    # Configuration Helpers
+    # =========================
+    
+    def _get_base_url(self) -> str:
+        """Get base URL from config."""
+        return self._config.get("base_url", "")
+    
+    def _get_cdp_port(self) -> int:
+        """Get CDP port from config (default 9223)."""
+        try:
+            return int(self._config.get("cdp", {}).get("port", 9223))
+        except Exception:
+            return 9223
+    
+    # =========================
+    # Abstract Selectors (must be defined by subclass)
     # =========================
     
     @property
@@ -970,18 +1256,35 @@ class WebAIBase(BaseAI):
         pass
     
     # =========================
-    # Shared implementation
+    # Web Interaction Flow
     # =========================
     
-    async def _execute_interaction(
+    async def _execute_web_interaction(
         self,
         page: Page,
         message: str,
         wait_for_response: bool,
         timeout_s: int
     ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
-        """Standard web AI interaction flow."""
+        """
+        Execute the standard web interaction flow.
         
+        Flow:
+        1. Ensure chat is ready
+        2. Get baseline response count
+        3. Send message
+        4. Wait for response completion
+        5. Extract response
+        
+        Args:
+            page: Playwright page object
+            message: Message to send
+            wait_for_response: Whether to wait for reply
+            timeout_s: Maximum wait time
+            
+        Returns:
+            Tuple of (success, snippet, full_markdown, metadata)
+        """
         if not await self._ensure_chat_ready(page):
             return False, None, None, {"error": "chat_not_ready"}
         
@@ -1003,36 +1306,32 @@ class WebAIBase(BaseAI):
             elapsed_ms = int((time.time() - t0) * 1000)
         
         metadata = {
-            "page_url": page.url,
             "elapsed_ms": elapsed_ms,
             "waited": wait_for_response,
         }
         
         return True, snippet, markdown, metadata
     
-    async def start_new_session(self, page: Page) -> bool:
-        """Start a new chat session (standard implementation)."""
-        try:
-            button = page.locator(self.NEW_CHAT_BUTTON).first
-            await button.wait_for(state="visible", timeout=5000)
-            await button.click()
-            
-            await page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
-            return True
-        except Exception:
-            return False
-    
     async def _ensure_chat_ready(self, page: Page) -> bool:
-        """Ensure chat interface is ready for input."""
+        """
+        Ensure chat interface is ready for input.
+        
+        Args:
+            page: Playwright page object
+            
+        Returns:
+            True if ready, False otherwise
+        """
         # Navigate if needed
-        if not page.url.startswith(self.get_base_url()):
+        if not page.url.startswith(self._get_base_url()):
             try:
                 await page.goto(
-                    self.get_base_url(),
+                    self._get_base_url(),
                     wait_until="domcontentloaded",
                     timeout=10000
                 )
-            except Exception:
+            except Exception as e:
+                self._logger.error(f"Navigation failed: {e}")
                 return False
         
         # Wait for input box
@@ -1040,19 +1339,44 @@ class WebAIBase(BaseAI):
             await page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
             return True
         except PWTimeout:
+            self._logger.error("Input box not visible within timeout")
             return False
     
     async def _send_message(self, page: Page, message: str) -> bool:
-        """Send message to the AI."""
+        """
+        Send message to the AI.
+        
+        Args:
+            page: Playwright page object
+            message: Message text to send
+            
+        Returns:
+            True if sent successfully, False otherwise
+        """
         try:
             await page.fill(self.INPUT_BOX, message, timeout=5000)
             await page.keyboard.press("Enter")
             return True
-        except Exception:
+        except Exception as e:
+            self._logger.error(f"Failed to send message: {e}")
             return False
     
     async def _wait_for_response_complete(self, page: Page, timeout_s: int) -> bool:
-        """Wait for response to complete using stop-button pattern."""
+        """
+        Wait for response to complete using stop-button pattern.
+        
+        Algorithm:
+        1. Wait for stop button to appear
+        2. Poll until it disappears
+        3. Timeout if button stays visible too long
+        
+        Args:
+            page: Playwright page object
+            timeout_s: Maximum time to wait
+            
+        Returns:
+            True if completion detected, False on timeout
+        """
         try:
             # Wait for stop button to appear
             await page.wait_for_selector(self.STOP_BUTTON, state="visible", timeout=10000)
@@ -1064,12 +1388,15 @@ class WebAIBase(BaseAI):
                     return True
                 await asyncio.sleep(self.COMPLETION_CHECK_INTERVAL_S)
             
+            self._logger.warning("Response timeout: stop button still visible")
             return False
         
         except PWTimeout:
             # Stop button never appeared (instant response)
+            self._logger.debug("Stop button never appeared (instant response)")
             return True
-        except Exception:
+        except Exception as e:
+            self._logger.warning(f"Error waiting for completion: {e}")
             return True
     
     async def _extract_response(
@@ -1077,7 +1404,16 @@ class WebAIBase(BaseAI):
         page: Page,
         baseline_count: int
     ) -> Tuple[Optional[str], Optional[str]]:
-        """Extract the last response from the page."""
+        """
+        Extract the last response from the page.
+        
+        Args:
+            page: Playwright page object
+            baseline_count: Number of responses before sending prompt
+            
+        Returns:
+            Tuple of (snippet, full_markdown) or (None, None)
+        """
         content_sel = f"{self.RESPONSE_CONTAINER}:has({self.RESPONSE_CONTENT})"
         
         try:
@@ -1091,6 +1427,7 @@ class WebAIBase(BaseAI):
             # Get last response content
             last_response_content = page.locator(self.RESPONSE_CONTENT).last
             if await last_response_content.count() == 0:
+                self._logger.warning("No response content found")
                 return None, None
             
             html = await last_response_content.inner_html()
@@ -1107,11 +1444,20 @@ class WebAIBase(BaseAI):
             
             return snippet, markdown_text
         
-        except Exception:
+        except Exception as e:
+            self._logger.error(f"Failed to extract response: {e}")
             return None, None
     
     async def _get_response_count(self, page: Page) -> int:
-        """Get current count of response containers."""
+        """
+        Get current count of response containers.
+        
+        Args:
+            page: Playwright page object
+            
+        Returns:
+            Number of response containers found
+        """
         content_sel = f"{self.RESPONSE_CONTAINER}:has({self.RESPONSE_CONTENT})"
         try:
             return await page.locator(content_sel).count()
@@ -1119,7 +1465,15 @@ class WebAIBase(BaseAI):
             return 0
     
     def _create_snippet(self, text: str) -> str:
-        """Create smart-trimmed snippet from text."""
+        """
+        Create smart-trimmed snippet from text.
+        
+        Args:
+            text: Full text to create snippet from
+            
+        Returns:
+            Truncated text with ellipsis if needed
+        """
         if not text:
             return ""
         
@@ -1142,10 +1496,16 @@ class WebAIBase(BaseAI):
     # =========================
     
     async def list_messages(self) -> list[Dict[str, Any]]:
-        raise NotImplementedError(f"list_messages not yet implemented for {self.__class__.__name__}")
+        """List messages - not yet implemented for web AIs."""
+        raise NotImplementedError(
+            f"list_messages not yet implemented for {self.__class__.__name__}"
+        )
     
     async def extract_message(self, index: int) -> Optional[str]:
-        raise NotImplementedError(f"extract_message not yet implemented for {self.__class__.__name__}")
+        """Extract message - not yet implemented for web AIs."""
+        raise NotImplementedError(
+            f"extract_message not yet implemented for {self.__class__.__name__}"
+        )
 
 
 ================================================================================
@@ -1759,20 +2119,18 @@ FILE: src/ai_cli_bridge/daemon/main.py
 ================================================================================
 
 """
-Main entry point for the AI-CLI-Bridge Daemon.
+Main entry point for the AI-CLI-Bridge Daemon (Final Refactored Version).
 
-This daemon manages persistent AI instances and serves as the bridge between
-CLI commands and browser-based AI interactions. It does NOT launch the browser -
-it expects an external CDP browser to already be running (via LaunchCDP.sh).
-
-Architecture:
-- Long-lived FastAPI server
-- Persistent AI object instances (maintain state across requests)
-- Locks to prevent concurrent access to same AI
-- Connects to external CDP browser on port 9223
+Key features:
+- Browser connection pool created once and injected into AI instances
+- Web-specific dependencies properly isolated
+- Clean separation between BaseAI interface and WebAI implementation
+- Separate AI status and transport status endpoints
+- Standard Python logging configured at startup
 """
 
 import asyncio
+import logging
 import os
 import signal
 import time
@@ -1783,6 +2141,7 @@ from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 
 from ..ai.factory import AIFactory
+from ..ai.web_base import BrowserConnectionPool, WebAIBase
 from . import config
 
 # ---------------------------------------------------------------------------
@@ -1790,23 +2149,19 @@ from . import config
 # ---------------------------------------------------------------------------
 
 daemon_state: Dict[str, Any] = {
-    "ai_instances": {},      # Persistent AI objects {name: instance}
-    "locks": {},             # Concurrency locks {name: asyncio.Lock}
-    "browser_pid": None,     # Browser process ID for shutdown
+    "ai_instances": {},           # Persistent AI objects {name: instance}
+    "locks": {},                  # Concurrency locks {name: asyncio.Lock}
+    "browser_pool": None,         # Shared browser connection pool
+    "browser_pid": None,          # Browser process ID for shutdown
 }
 
 
 # ---------------------------------------------------------------------------
-# CDP Browser Verification (MUST BE BEFORE lifespan)
+# CDP Browser Verification
 # ---------------------------------------------------------------------------
 
 def verify_cdp_browser() -> bool:
-    """
-    Verify that the CDP browser is running on port 9223.
-    
-    Returns:
-        True if browser is accessible, False otherwise
-    """
+    """Verify that the CDP browser is running on port 9223."""
     import urllib.request
     import json
     
@@ -1824,12 +2179,7 @@ def verify_cdp_browser() -> bool:
 
 
 def read_browser_pid() -> int | None:
-    """
-    Read the browser PID from the PID file.
-    
-    Returns:
-        Browser PID if file exists and is valid, None otherwise
-    """
+    """Read the browser PID from the PID file."""
     pid_file = config.PROJECT_ROOT / "runtime" / "browser.pid"
     
     if not pid_file.exists():
@@ -1837,20 +2187,14 @@ def read_browser_pid() -> int | None:
     
     try:
         pid = int(pid_file.read_text().strip())
-        # Verify process exists
-        os.kill(pid, 0)  # Signal 0 checks existence without killing
+        os.kill(pid, 0)  # Verify process exists
         return pid
     except (ValueError, ProcessLookupError, PermissionError):
         return None
 
 
 def stop_browser(pid: int) -> None:
-    """
-    Gracefully stop the CDP browser process.
-    
-    Args:
-        pid: Browser process ID
-    """
+    """Gracefully stop the CDP browser process."""
     try:
         print(f"    → Stopping browser (PID: {pid})...")
         os.kill(pid, signal.SIGTERM)
@@ -1886,18 +2230,29 @@ async def lifespan(app: FastAPI):
     Handles startup and shutdown events for the FastAPI application.
     
     Startup:
+    - Configure logging
     - Verify CDP browser is running
+    - Create shared browser connection pool
     - Create persistent AI instances
-    - Initialize locks
+    - Inject browser pool into web-based AIs
     
     Shutdown:
+    - Close all browser connections
     - Stop CDP browser gracefully
-    - Clean up resources
     """
     print("🚀 AI-CLI-Bridge Daemon starting up...")
     
-    # Load configuration
+    # Step 0: Configure logging
     app_config = config.load_config()
+    log_level = app_config.get("daemon", {}).get("log_level", "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, log_level, logging.INFO),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    logger.info("Logging configured")
+    
+    # Load configuration
     daemon_state["config"] = app_config
     print("    ✓ Configuration loaded")
     
@@ -1917,13 +2272,18 @@ async def lifespan(app: FastAPI):
     else:
         print("    ⚠ Warning: Could not read browser PID (shutdown may not work)")
     
-    # Step 3: Import all AI modules to trigger registration
+    # Step 3: Create shared browser connection pool
+    print("    → Creating browser connection pool...")
+    daemon_state["browser_pool"] = BrowserConnectionPool()
+    print("    ✓ Browser connection pool created")
+    
+    # Step 4: Import all AI modules to trigger registration
     print("    → Registering AI implementations...")
     AIFactory.import_all_ais()
     available_ais = AIFactory.list_available()
     print(f"    ✓ Available AIs: {', '.join(available_ais)}")
     
-    # Step 4: Create persistent AI instances
+    # Step 5: Create persistent AI instances
     print("    → Creating persistent AI instances...")
     for ai_name in available_ais:
         try:
@@ -1934,13 +2294,19 @@ async def lifespan(app: FastAPI):
             # Create instance
             instance = AIFactory.create(ai_name, ai_config)
             
+            # Inject browser pool if this is a web-based AI
+            if isinstance(instance, WebAIBase):
+                instance.set_browser_pool(daemon_state["browser_pool"])
+                print(f"      ✓ '{ai_name}' instance created (web-based)")
+            else:
+                print(f"      ✓ '{ai_name}' instance created (API-based)")
+            
             # Store instance and create lock
             daemon_state["ai_instances"][ai_name] = instance
             daemon_state["locks"][ai_name] = asyncio.Lock()
             
-            print(f"      ✓ '{ai_name}' instance created")
-            
         except Exception as e:
+            logger.error(f"Failed to create '{ai_name}': {e}", exc_info=True)
             print(f"      ✗ Failed to create '{ai_name}': {e}")
             # Continue with other AIs even if one fails
     
@@ -1955,6 +2321,12 @@ async def lifespan(app: FastAPI):
     
     # --- Shutdown Logic ---
     print("\n🔌 AI-CLI-Bridge Daemon shutting down...")
+    
+    # Close browser connection pool
+    if daemon_state["browser_pool"]:
+        print("    → Closing browser connections...")
+        await daemon_state["browser_pool"].close_all()
+        print("    ✓ Browser connections closed")
     
     # Stop the CDP browser if we have its PID
     if daemon_state.get("browser_pid"):
@@ -1993,7 +2365,8 @@ async def root():
     return {
         "service": "ai-cli-bridge-daemon",
         "version": "2.0.0",
-        "status": "running"
+        "status": "running",
+        "architecture": "clean_separation_v2"
     }
 
 
@@ -2002,13 +2375,13 @@ async def get_status():
     """
     Get high-level status of all managed AI instances.
     
-    Returns:
-        Dictionary with status of each AI instance
+    Returns separate AI status and transport status for clean separation.
     """
     status = {
         "daemon": {
             "version": "2.0.0",
             "available_ais": list(daemon_state["ai_instances"].keys()),
+            "browser_pool_active": daemon_state["browser_pool"] is not None,
         },
         "ais": {}
     }
@@ -2016,9 +2389,19 @@ async def get_status():
     # Get status from each AI instance
     for ai_name, ai_instance in daemon_state["ai_instances"].items():
         try:
-            ai_status = await ai_instance.get_status()
-            status["ais"][ai_name] = ai_status
+            # Combine AI status and transport status
+            ai_status = ai_instance.get_ai_status()
+            transport_status = ai_instance.get_transport_status()
+            
+            status["ais"][ai_name] = {
+                **ai_status,
+                **transport_status,
+            }
         except Exception as e:
+            logging.getLogger(__name__).error(
+                f"Error getting status for {ai_name}: {e}",
+                exc_info=True
+            )
             status["ais"][ai_name] = {
                 "error": str(e),
                 "connected": False
@@ -2034,27 +2417,15 @@ async def send_prompt_to_ai(request: dict):
     
     Request body:
         {
-            "target": "claude",              # AI name (claude, gemini, chatgpt)
+            "target": "claude",              # AI name
             "prompt": "Hello, world!",       # Message to send
-            "wait_for_response": true,       # Wait for AI response (default: true)
-            "timeout_s": 120,                # Timeout in seconds (default: 120)
-            "debug": false                   # Enable debug output (default: false)
-        }
-    
-    Returns:
-        {
-            "success": true,
-            "snippet": "First ~280 chars of response...",
-            "markdown": "Full response in markdown format",
-            "metadata": {
-                "turn_count": 1,
-                "token_count": 150,
-                "ctaw_usage_percent": 0.075,
-                "elapsed_ms": 3421,
-                ...
-            }
+            "wait_for_response": true,       # Wait for AI response
+            "timeout_s": 120,                # Timeout in seconds
+            "debug": false                   # Enable debug output
         }
     """
+    logger = logging.getLogger(__name__)
+    
     # Validate request
     target = request.get("target")
     prompt = request.get("prompt")
@@ -2082,11 +2453,6 @@ async def send_prompt_to_ai(request: dict):
             detail=f"Internal error: lock not found for '{target}'"
         )
     
-    # Set debug mode if requested
-    debug = request.get("debug", False)
-    if debug:
-        ai_instance.set_debug(True)
-    
     # Acquire lock and send prompt
     async with lock:
         try:
@@ -2104,29 +2470,18 @@ async def send_prompt_to_ai(request: dict):
             }
             
         except Exception as e:
+            logger.error(f"Error during interaction with {target}: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"Error during interaction: {str(e)}"
             )
-        finally:
-            # Reset debug mode
-            if debug:
-                ai_instance.set_debug(False)
 
 
 @app.post("/session/new/{ai_name}")
 async def new_session(ai_name: str):
-    """
-    Start a new chat session for the specified AI.
+    """Start a new chat session for the specified AI."""
+    logger = logging.getLogger(__name__)
     
-    This will reset the turn counter and token estimates.
-    
-    Args:
-        ai_name: AI identifier (claude, gemini, chatgpt)
-    
-    Returns:
-        Success status
-    """
     ai_instance = daemon_state["ai_instances"].get(ai_name)
     if not ai_instance:
         raise HTTPException(
@@ -2134,15 +2489,27 @@ async def new_session(ai_name: str):
             detail=f"AI '{ai_name}' not found"
         )
     
-    # Reset session state
-    ai_instance.reset_session_state()
-    
-    return {
-        "success": True,
-        "message": f"New session started for '{ai_name}'",
-        "turn_count": ai_instance.get_turn_count(),
-        "token_count": ai_instance.get_token_count()
-    }
+    try:
+        success = await ai_instance.start_new_session()
+        
+        if success:
+            ai_status = ai_instance.get_ai_status()
+            return {
+                "success": True,
+                "message": f"New session started for '{ai_name}'",
+                **ai_status,
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to start new session for '{ai_name}'"
+            )
+    except Exception as e:
+        logger.error(f"Error starting new session for {ai_name}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error starting new session: {str(e)}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -2859,13 +3226,13 @@ Shell scripts:   1
 
 Lines of Code:
 --------------
- 2155 total
+ 2522 total
 
 Module Breakdown:
 -----------------
-ai:                  1054 lines
+ai:                  1414 lines
 commands:            298 lines
-daemon:              720 lines
+daemon:              727 lines
 __pycache__:         0 lines
 
 

@@ -105,7 +105,8 @@ class ResponseDisplay:
     def set_text(self, text):
         """Set and format text content"""
         self.buffer.set_text("")  # Clear existing
-        self.parser.parse_and_format(text)
+        if text:
+            self.parser.parse_and_format(text)
     
     def get_text(self):
         """Get plain text content"""
