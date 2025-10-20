@@ -16,6 +16,7 @@ class ChatGPTAI(WebAIBase):
     # =========================
     
     BASE_URL = "https://chatgpt.com"
+    #BASE_URL = "https://chat.openai.com"
     CDP_PORT = 9223
     
     @classmethod

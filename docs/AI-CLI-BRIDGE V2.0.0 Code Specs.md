@@ -26,24 +26,6 @@ This document provides detailed implementation specifications for AI-CLI-Bridge 
 
 ---
 
-## Table of Contents
-
-1. [Software Stack Specification](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#1-software-stack-specification)
-2. [Dependency Management](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#2-dependency-management)
-3. [Build System & Packaging](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#3-build-system--packaging)
-4. [Code Organization & Patterns](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#4-code-organization--patterns)
-5. [Implementation Details by Module](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#5-implementation-details-by-module)
-6. [Browser Automation Implementation](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#6-browser-automation-implementation)
-7. [HTTP & Networking Layer](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#7-http--networking-layer)
-8. [State Management](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#8-state-management)
-9. [Error Handling Strategies](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#9-error-handling-strategies)
-10. [Testing Infrastructure](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#10-testing-infrastructure)
-11. [Development Workflows](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#11-development-workflows)
-12. [Deployment Procedures](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#12-deployment-procedures)
-13. [Performance Optimization](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#13-performance-optimization)
-14. [Monitoring & Observability](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#14-monitoring--observability)
-15. [Appendices](https://claude.ai/chat/dcd977d4-4555-4ec5-9497-5be7cc645b4a#15-appendices)
-
 ---
 
 ## 1. Software Stack Specification

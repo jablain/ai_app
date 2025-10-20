@@ -1,6 +1,6 @@
 from ..config import ensure_dirs
 from ..display import has_display, mode
-def run(startup:bool, as_json:bool):
+def run(startup: bool = False, as_json: bool = False):
     ensure_dirs()
     if startup:
         print(f"✓ Display: {'Available' if has_display() else 'Unavailable'} ({mode()})")

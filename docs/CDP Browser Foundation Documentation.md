@@ -6,7 +6,6 @@
 This document describes the CDP (Chrome DevTools Protocol) browser infrastructure for the ai-cli-bridge project. This is the foundation layer that enables the daemon to interact with AI web interfaces (Claude, Gemini, ChatGPT) through browser automation.
 
 ---
-
 ## Architecture
 
 ### **Design Principles**

@@ -117,7 +117,7 @@ class AIFactory:
         except ImportError as e:
             print(f"Warning: Could not import gemini: {e}")
         
-        #try:
+        try:
             from . import chatgpt
         except ImportError as e:
             print(f"Warning: Could not import chatgpt: {e}")
