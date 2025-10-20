@@ -3,13 +3,10 @@
 from __future__ import annotations
 import typer
 
-# Import run() directly from each module (harmonized style)
-from .commands.open_cmd import run as open_run
-from .commands.doctor_cmd import run as doctor_run
-from .commands.init_cmd import run as init_run
-from .commands.init_cdp_cmd import run as init_cdp_run
+# Import only commands that still exist
 from .commands.status_cmd import run as status_run
 from .commands.send_cmd import run as send_run
+from .commands.init_cdp_cmd import run as init_cdp_run
 
 # Import daemon command group
 from .daemon import daemon_cmd
@@ -23,16 +20,6 @@ app = typer.Typer(
 # Add daemon subcommand group
 app.add_typer(daemon_cmd.app, name="daemon")
 
-@app.command("init")
-def init(
-    ai_name: str = typer.Argument(..., help="Target AI profile to initialize (non-CDP)."),
-):
-    """
-    Initialize target AI profile (non-CDP).
-    """
-    raise typer.Exit(init_run(ai_name))
-
-
 @app.command("init-cdp")
 def init_cdp(
     ai_name: str = typer.Argument(..., help="Target AI (e.g., 'claude'). Launch Playwright Chromium in CDP mode."),
@@ -42,28 +29,6 @@ def init_cdp(
     Prints the DevTools ws URL.
     """
     raise typer.Exit(init_cdp_run(ai_name))
-
-
-@app.command("open")
-def open_cmd(
-    ai_name: str = typer.Argument(..., help="Target AI profile (e.g., 'claude')."),
-    conversation: str | None = typer.Option(
-        None,
-        "--conversation",
-        help="Optional conversation URL to open/attach.",
-    ),
-    force: bool = typer.Option(
-        False,
-        "--force",
-        help="Force navigation even if already on the same origin.",
-    ),
-):
-    """
-    Attach to the running CDP Chromium and open/attach to a target conversation.
-    Respects 'no reload if already on origin' logic.
-    """
-    raise typer.Exit(open_run(ai_name, conversation, force))
-
 
 @app.command("send")
 def send(
@@ -96,14 +61,6 @@ def send(
     """
     raise typer.Exit(send_run(ai_name, message, wait, timeout, json, debug))
 
-@app.command("doctor")
-def doctor():
-    """
-    Basic environment/system checks.
-    """
-    raise typer.Exit(doctor_run())
-
-
 @app.command("status")
 def status(
     ai_name: str = typer.Argument(..., help="Target AI profile name (e.g., 'claude')."),
@@ -112,7 +69,6 @@ def status(
     """Report CDP attach, current page URL, and selector sanity for the target."""
     raise typer.Exit(status_run(ai_name, json))
 
-
 @app.command("version")
 def version():
     """
@@ -120,10 +76,8 @@ def version():
     """
     typer.echo("ai-cli-bridge 2.0.0")
 
-
 def main():
     app()
-
 
 if __name__ == "__main__":
     main()

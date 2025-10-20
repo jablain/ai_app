@@ -4,12 +4,15 @@ import json
 import os
 import socket
 import subprocess
+import sys
 import time
 from pathlib import Path
-from typing import Any, Dict
 
-from ..config import load
-from ..errors import E, die
+
+def die(message: str, exit_code: int = 1):
+    """Print error and exit."""
+    print(f"Error: {message}", file=sys.stderr)
+    sys.exit(exit_code)
 
 
 def _is_port_open(port: int) -> bool:
@@ -23,22 +26,16 @@ def _is_port_open(port: int) -> bool:
 def _ensure_dir(p: str):
     d = Path(p)
     d.mkdir(parents=True, exist_ok=True)
-    # lock down perms per spec
     os.chmod(d, 0o700)
 
 
-def _launch_playwright(cdp_cfg: Dict[str, Any]) -> subprocess.Popen:
+def _launch_playwright(port: int, user_data_dir: str, startup_urls: list) -> subprocess.Popen:
     """
     Launch Playwright-bundled Chromium with:
       --remote-debugging-port
       --user-data-dir
       startup URLs
     """
-    port = int(cdp_cfg.get("port", 9223))
-    user_data_dir = cdp_cfg.get("user_data_dir")
-    if not user_data_dir:
-        die(E.E003, "cdp.user_data_dir is required for launcher=playwright")
-
     _ensure_dir(user_data_dir)
 
     # Locate the Playwright Chromium executable
@@ -51,50 +48,21 @@ def _launch_playwright(cdp_cfg: Dict[str, Any]) -> subprocess.Popen:
     try:
         exe = subprocess.check_output(["python", "-c", py], text=True).strip()
     except Exception as e:
-        die(E.E003, f"Unable to locate Playwright Chromium: {e}")
+        die(f"Unable to locate Playwright Chromium: {e}")
 
-    urls = list(cdp_cfg.get("startup_urls") or [])
     args = [
         exe,
         f"--remote-debugging-port={port}",
         f"--user-data-dir={user_data_dir}",
         "--no-first-run",
         "--new-window",
-    ] + urls
+    ] + startup_urls
 
-    # Launch detached so CLI can return while browser lives
-    return subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-
-
-def _launch_flatpak(cdp_cfg: Dict[str, Any]) -> subprocess.Popen:
-    """
-    Launch Ungoogled Chromium Flatpak with remote debugging.
-    """
-    port = int(cdp_cfg.get("port", 9222))
-    user_data_dir = cdp_cfg.get("user_data_dir")
-    flatpak_id = cdp_cfg.get("flatpak_id", "io.github.ungoogled_software.ungoogled_chromium")
-
-    if not user_data_dir:
-        die(E.E003, "cdp.user_data_dir is required for launcher=flatpak")
-
-    _ensure_dir(user_data_dir)
-
-    urls = list(cdp_cfg.get("startup_urls") or [])
-    base = [
-        "flatpak", "run", flatpak_id,
-        f"--remote-debugging-port={port}",
-        f"--user-data-dir={user_data_dir}",
-        "--no-first-run",
-        "--new-window",
-    ]
-    args = base + urls
     return subprocess.Popen(args, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
 
 def _wait_for_ws(port: int, wait_seconds: int) -> str | None:
-    """
-    Poll /json/version until webSocketDebuggerUrl is present, or timeout.
-    """
+    """Poll /json/version until webSocketDebuggerUrl is present, or timeout."""
     import urllib.request
     deadline = time.time() + max(1, wait_seconds)
     while time.time() < deadline:
@@ -112,47 +80,51 @@ def _wait_for_ws(port: int, wait_seconds: int) -> str | None:
 
 def run(ai_name: str) -> int:
     """
-    Launch a CDP-enabled browser for the given AI config and print a ws:// URL.
+    Launch a CDP-enabled browser for the given AI and print a ws:// URL.
     Returns exit code: 0 on success, 1 on failure.
+    
+    V2.0.0 simplified version - uses hardcoded multi-AI setup.
     """
-    cfg = load(ai_name)
-    cdp = cfg.get("cdp") or {}
-    if not cdp:
-        die(E.E003, f"No 'cdp' block found in config for '{ai_name}'")
+    # V2.0.0 hardcoded configuration
+    port = 9223
+    wait_seconds = 10
+    
+    # Project root detection
+    project_root = Path.home() / "dev/ai_app/ai-cli-bridge"
+    user_data_dir = str(project_root / "runtime/profiles/multi_ai_cdp")
+    
+    # AI-specific startup URLs
+    startup_urls_map = {
+        "claude": ["https://claude.ai/new"],
+        "gemini": ["https://gemini.google.com/app"],
+        "chatgpt": ["https://chat.openai.com/"],
+    }
+    
+    startup_urls = startup_urls_map.get(ai_name.lower())
+    if not startup_urls:
+        die(f"Unknown AI: '{ai_name}'. Available: claude, gemini, chatgpt")
 
-    launcher = (cdp.get("launcher") or "flatpak").strip().lower()
-    port = int(cdp.get("port") or (9223 if launcher == "playwright" else 9222))
-    wait_seconds = int(cdp.get("wait_seconds") or 10)
-
-    # If something is already listening, don't double-launch; just try to read the ws endpoint.
+    # If something is already listening, don't double-launch
     proc = None
     try:
         if not _is_port_open(port):
             print("Launching CDP browser...")
-            if launcher == "playwright":
-                proc = _launch_playwright(cdp)
-            elif launcher == "flatpak":
-                proc = _launch_flatpak(cdp)
-            else:
-                die(E.E003, f"Unknown cdp.launcher '{launcher}'. Expected 'playwright' or 'flatpak'.")
+            proc = _launch_playwright(port, user_data_dir, startup_urls)
 
         ws = _wait_for_ws(port, wait_seconds)
         if not ws:
             if proc and proc.poll() is not None:
-                # Process died early; show a hint
                 try:
                     _, err = proc.communicate(timeout=0.5)
                     err_txt = err.decode("utf-8", "ignore")
                 except Exception:
                     err_txt = "(no stderr)"
-                die(E.E002, f"DevTools endpoint not available. Browser exited early.\n{err_txt}")
-            die(E.E002, "DevTools endpoint not available. Is the browser blocked by pop-ups or policy?")
+                die(f"DevTools endpoint not available. Browser exited early.\n{err_txt}")
+            die("DevTools endpoint not available. Is the browser blocked?")
 
         print(f"CDP ready: {ws}")
-        print("Tip: export this in your shell if you want it available to subsequent commands:")
+        print("Tip: export this in your shell:")
         print(f'export AI_CLI_BRIDGE_CDP_URL="{ws}"')
         return 0
     finally:
-        # Do NOT kill the browser; leave it running for the session.
         pass
-
