@@ -1,18 +1,16 @@
 """
-Main entry point for the AI-CLI-Bridge Daemon.
+Main entry point for the AI-CLI-Bridge Daemon (Final Refactored Version).
 
-This daemon manages persistent AI instances and serves as the bridge between
-CLI commands and browser-based AI interactions. It does NOT launch the browser -
-it expects an external CDP browser to already be running (via LaunchCDP.sh).
-
-Architecture:
-- Long-lived FastAPI server
-- Persistent AI object instances (maintain state across requests)
-- Locks to prevent concurrent access to same AI
-- Connects to external CDP browser on port 9223
+Key features:
+- Browser connection pool created once and injected into AI instances
+- Web-specific dependencies properly isolated
+- Clean separation between BaseAI interface and WebAI implementation
+- Separate AI status and transport status endpoints
+- Standard Python logging configured at startup
 """
 
 import asyncio
+import logging
 import os
 import signal
 import time
@@ -23,6 +21,7 @@ from fastapi import FastAPI, HTTPException
 from contextlib import asynccontextmanager
 
 from ..ai.factory import AIFactory
+from ..ai.web_base import BrowserConnectionPool, WebAIBase
 from . import config
 
 # ---------------------------------------------------------------------------
@@ -30,23 +29,19 @@ from . import config
 # ---------------------------------------------------------------------------
 
 daemon_state: Dict[str, Any] = {
-    "ai_instances": {},      # Persistent AI objects {name: instance}
-    "locks": {},             # Concurrency locks {name: asyncio.Lock}
-    "browser_pid": None,     # Browser process ID for shutdown
+    "ai_instances": {},           # Persistent AI objects {name: instance}
+    "locks": {},                  # Concurrency locks {name: asyncio.Lock}
+    "browser_pool": None,         # Shared browser connection pool
+    "browser_pid": None,          # Browser process ID for shutdown
 }
 
 
 # ---------------------------------------------------------------------------
-# CDP Browser Verification (MUST BE BEFORE lifespan)
+# CDP Browser Verification
 # ---------------------------------------------------------------------------
 
 def verify_cdp_browser() -> bool:
-    """
-    Verify that the CDP browser is running on port 9223.
-    
-    Returns:
-        True if browser is accessible, False otherwise
-    """
+    """Verify that the CDP browser is running on port 9223."""
     import urllib.request
     import json
     
@@ -64,12 +59,7 @@ def verify_cdp_browser() -> bool:
 
 
 def read_browser_pid() -> int | None:
-    """
-    Read the browser PID from the PID file.
-    
-    Returns:
-        Browser PID if file exists and is valid, None otherwise
-    """
+    """Read the browser PID from the PID file."""
     pid_file = config.PROJECT_ROOT / "runtime" / "browser.pid"
     
     if not pid_file.exists():
@@ -77,20 +67,14 @@ def read_browser_pid() -> int | None:
     
     try:
         pid = int(pid_file.read_text().strip())
-        # Verify process exists
-        os.kill(pid, 0)  # Signal 0 checks existence without killing
+        os.kill(pid, 0)  # Verify process exists
         return pid
     except (ValueError, ProcessLookupError, PermissionError):
         return None
 
 
 def stop_browser(pid: int) -> None:
-    """
-    Gracefully stop the CDP browser process.
-    
-    Args:
-        pid: Browser process ID
-    """
+    """Gracefully stop the CDP browser process."""
     try:
         print(f"    → Stopping browser (PID: {pid})...")
         os.kill(pid, signal.SIGTERM)
@@ -126,18 +110,29 @@ async def lifespan(app: FastAPI):
     Handles startup and shutdown events for the FastAPI application.
     
     Startup:
+    - Configure logging
     - Verify CDP browser is running
+    - Create shared browser connection pool
     - Create persistent AI instances
-    - Initialize locks
+    - Inject browser pool into web-based AIs
     
     Shutdown:
+    - Close all browser connections
     - Stop CDP browser gracefully
-    - Clean up resources
     """
     print("🚀 AI-CLI-Bridge Daemon starting up...")
     
-    # Load configuration
+    # Step 0: Configure logging
     app_config = config.load_config()
+    log_level = app_config.get("daemon", {}).get("log_level", "INFO").upper()
+    logging.basicConfig(
+        level=getattr(logging, log_level, logging.INFO),
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+    logger = logging.getLogger(__name__)
+    logger.info("Logging configured")
+    
+    # Load configuration
     daemon_state["config"] = app_config
     print("    ✓ Configuration loaded")
     
@@ -157,13 +152,18 @@ async def lifespan(app: FastAPI):
     else:
         print("    ⚠ Warning: Could not read browser PID (shutdown may not work)")
     
-    # Step 3: Import all AI modules to trigger registration
+    # Step 3: Create shared browser connection pool
+    print("    → Creating browser connection pool...")
+    daemon_state["browser_pool"] = BrowserConnectionPool()
+    print("    ✓ Browser connection pool created")
+    
+    # Step 4: Import all AI modules to trigger registration
     print("    → Registering AI implementations...")
     AIFactory.import_all_ais()
     available_ais = AIFactory.list_available()
     print(f"    ✓ Available AIs: {', '.join(available_ais)}")
     
-    # Step 4: Create persistent AI instances
+    # Step 5: Create persistent AI instances
     print("    → Creating persistent AI instances...")
     for ai_name in available_ais:
         try:
@@ -174,13 +174,19 @@ async def lifespan(app: FastAPI):
             # Create instance
             instance = AIFactory.create(ai_name, ai_config)
             
+            # Inject browser pool if this is a web-based AI
+            if isinstance(instance, WebAIBase):
+                instance.set_browser_pool(daemon_state["browser_pool"])
+                print(f"      ✓ '{ai_name}' instance created (web-based)")
+            else:
+                print(f"      ✓ '{ai_name}' instance created (API-based)")
+            
             # Store instance and create lock
             daemon_state["ai_instances"][ai_name] = instance
             daemon_state["locks"][ai_name] = asyncio.Lock()
             
-            print(f"      ✓ '{ai_name}' instance created")
-            
         except Exception as e:
+            logger.error(f"Failed to create '{ai_name}': {e}", exc_info=True)
             print(f"      ✗ Failed to create '{ai_name}': {e}")
             # Continue with other AIs even if one fails
     
@@ -195,6 +201,12 @@ async def lifespan(app: FastAPI):
     
     # --- Shutdown Logic ---
     print("\n🔌 AI-CLI-Bridge Daemon shutting down...")
+    
+    # Close browser connection pool
+    if daemon_state["browser_pool"]:
+        print("    → Closing browser connections...")
+        await daemon_state["browser_pool"].close_all()
+        print("    ✓ Browser connections closed")
     
     # Stop the CDP browser if we have its PID
     if daemon_state.get("browser_pid"):
@@ -233,7 +245,8 @@ async def root():
     return {
         "service": "ai-cli-bridge-daemon",
         "version": "2.0.0",
-        "status": "running"
+        "status": "running",
+        "architecture": "clean_separation_v2"
     }
 
 
@@ -242,13 +255,13 @@ async def get_status():
     """
     Get high-level status of all managed AI instances.
     
-    Returns:
-        Dictionary with status of each AI instance
+    Returns separate AI status and transport status for clean separation.
     """
     status = {
         "daemon": {
             "version": "2.0.0",
             "available_ais": list(daemon_state["ai_instances"].keys()),
+            "browser_pool_active": daemon_state["browser_pool"] is not None,
         },
         "ais": {}
     }
@@ -256,9 +269,19 @@ async def get_status():
     # Get status from each AI instance
     for ai_name, ai_instance in daemon_state["ai_instances"].items():
         try:
-            ai_status = await ai_instance.get_status()
-            status["ais"][ai_name] = ai_status
+            # Combine AI status and transport status
+            ai_status = ai_instance.get_ai_status()
+            transport_status = ai_instance.get_transport_status()
+            
+            status["ais"][ai_name] = {
+                **ai_status,
+                **transport_status,
+            }
         except Exception as e:
+            logging.getLogger(__name__).error(
+                f"Error getting status for {ai_name}: {e}",
+                exc_info=True
+            )
             status["ais"][ai_name] = {
                 "error": str(e),
                 "connected": False
@@ -274,27 +297,15 @@ async def send_prompt_to_ai(request: dict):
     
     Request body:
         {
-            "target": "claude",              # AI name (claude, gemini, chatgpt)
+            "target": "claude",              # AI name
             "prompt": "Hello, world!",       # Message to send
-            "wait_for_response": true,       # Wait for AI response (default: true)
-            "timeout_s": 120,                # Timeout in seconds (default: 120)
-            "debug": false                   # Enable debug output (default: false)
-        }
-    
-    Returns:
-        {
-            "success": true,
-            "snippet": "First ~280 chars of response...",
-            "markdown": "Full response in markdown format",
-            "metadata": {
-                "turn_count": 1,
-                "token_count": 150,
-                "ctaw_usage_percent": 0.075,
-                "elapsed_ms": 3421,
-                ...
-            }
+            "wait_for_response": true,       # Wait for AI response
+            "timeout_s": 120,                # Timeout in seconds
+            "debug": false                   # Enable debug output
         }
     """
+    logger = logging.getLogger(__name__)
+    
     # Validate request
     target = request.get("target")
     prompt = request.get("prompt")
@@ -322,11 +333,6 @@ async def send_prompt_to_ai(request: dict):
             detail=f"Internal error: lock not found for '{target}'"
         )
     
-    # Set debug mode if requested
-    debug = request.get("debug", False)
-    if debug:
-        ai_instance.set_debug(True)
-    
     # Acquire lock and send prompt
     async with lock:
         try:
@@ -344,29 +350,18 @@ async def send_prompt_to_ai(request: dict):
             }
             
         except Exception as e:
+            logger.error(f"Error during interaction with {target}: {e}", exc_info=True)
             raise HTTPException(
                 status_code=500,
                 detail=f"Error during interaction: {str(e)}"
             )
-        finally:
-            # Reset debug mode
-            if debug:
-                ai_instance.set_debug(False)
 
 
 @app.post("/session/new/{ai_name}")
 async def new_session(ai_name: str):
-    """
-    Start a new chat session for the specified AI.
+    """Start a new chat session for the specified AI."""
+    logger = logging.getLogger(__name__)
     
-    This will reset the turn counter and token estimates.
-    
-    Args:
-        ai_name: AI identifier (claude, gemini, chatgpt)
-    
-    Returns:
-        Success status
-    """
     ai_instance = daemon_state["ai_instances"].get(ai_name)
     if not ai_instance:
         raise HTTPException(
@@ -374,15 +369,27 @@ async def new_session(ai_name: str):
             detail=f"AI '{ai_name}' not found"
         )
     
-    # Reset session state
-    ai_instance.reset_session_state()
-    
-    return {
-        "success": True,
-        "message": f"New session started for '{ai_name}'",
-        "turn_count": ai_instance.get_turn_count(),
-        "token_count": ai_instance.get_token_count()
-    }
+    try:
+        success = await ai_instance.start_new_session()
+        
+        if success:
+            ai_status = ai_instance.get_ai_status()
+            return {
+                "success": True,
+                "message": f"New session started for '{ai_name}'",
+                **ai_status,
+            }
+        else:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to start new session for '{ai_name}'"
+            )
+    except Exception as e:
+        logger.error(f"Error starting new session for {ai_name}: {e}", exc_info=True)
+        raise HTTPException(
+            status_code=500,
+            detail=f"Error starting new session: {str(e)}"
+        )
 
 
 # ---------------------------------------------------------------------------

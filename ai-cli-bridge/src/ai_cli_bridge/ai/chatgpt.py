@@ -1,9 +1,7 @@
 """ChatGPT-specific AI implementation."""
 
 from typing import Dict, Any
-
 from playwright.async_api import Page
-
 from .web_base import WebAIBase
 from .factory import AIFactory
 
@@ -16,7 +14,6 @@ class ChatGPTAI(WebAIBase):
     # =========================
     
     BASE_URL = "https://chatgpt.com"
-    #BASE_URL = "https://chat.openai.com"
     CDP_PORT = 9223
     
     @classmethod
@@ -60,17 +57,19 @@ class ChatGPTAI(WebAIBase):
     async def _ensure_chat_ready(self, page: Page) -> bool:
         """ChatGPT-specific - skip textarea visibility check."""
         # Navigate to ChatGPT if needed
-        if not page.url.startswith(self.get_base_url()):
+        if not page.url.startswith(self._get_base_url()):
             try:
-                await page.goto(self.get_base_url(), wait_until="domcontentloaded", timeout=10000)
-            except Exception:
+                await page.goto(self._get_base_url(), wait_until="domcontentloaded", timeout=10000)
+            except Exception as e:
+                self._logger.error(f"Navigation failed: {e}")
                 return False
         
         # Just check if textarea exists in DOM (even if hidden)
         try:
             textarea = await page.query_selector(self.INPUT_BOX)
             return textarea is not None
-        except Exception:
+        except Exception as e:
+            self._logger.error(f"Input box check failed: {e}")
             return False
     
     async def _send_message(self, page: Page, message: str) -> bool:
@@ -85,7 +84,8 @@ class ChatGPTAI(WebAIBase):
                 return True
             
             return False
-        except Exception:
+        except Exception as e:
+            self._logger.error(f"Failed to send message: {e}")
             return False
 
 

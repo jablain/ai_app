@@ -1,7 +1,6 @@
 """Gemini-specific AI implementation."""
 
 from typing import Dict, Any
-
 from .web_base import WebAIBase
 from .factory import AIFactory
 
