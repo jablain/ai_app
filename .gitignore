@@ -1,6 +1,5 @@
 # Runtime directories - NEVER commit these (contain user data)
-*/runtime/
-shared/runtime/
+runtime/
 
 # Python
 __pycache__/
@@ -25,7 +24,6 @@ env/
 *.swp
 *.swo
 *~
-.DS_Store
 
 # Logs
 *.log
