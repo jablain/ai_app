@@ -1,0 +1,409 @@
+"""Abstract base class for AI interactions.
+
+This module defines the pure interface for interacting with AI systems,
+completely independent of any transport mechanism (web, API, etc.).
+"""
+
+import logging
+import time
+from abc import ABC, abstractmethod
+from typing import Optional, Tuple, Dict, Any, List, TypedDict
+from dataclasses import dataclass, field
+from datetime import datetime, timezone
+
+try:
+    import tiktoken
+    TIKTOKEN_AVAILABLE = True
+except ImportError:
+    TIKTOKEN_AVAILABLE = False
+
+# =========================
+# Type Definitions
+# =========================
+
+class AIConfig(TypedDict, total=False):
+    """Configuration dictionary for AI instances."""
+    ai_target: str
+    max_context_tokens: int
+    base_url: str  # For web-based AIs
+    cdp: dict      # For web-based AIs
+
+class AIStatus(TypedDict):
+    """AI status dictionary structure."""
+    ai_target: str
+    turn_count: int
+    token_count: int
+    message_count: int
+    session_duration_s: float
+    last_interaction_time: Optional[float]
+    ctaw_size: int
+    ctaw_usage_percent: float
+
+# =========================
+# Session State
+# =========================
+
+@dataclass
+class SessionState:
+    """
+    Encapsulates all session tracking state.
+    
+    This is implementation-agnostic - tracks logical operations
+    without knowing HOW they're performed. Fully self-contained
+    with its own CTAW tracking and usage calculation.
+    """
+    turn_count: int = 0
+    token_count: int = 0
+    message_count: int = 0
+    ctaw_size: int = 200000  # Default, overridden by config
+    session_start_time: float = field(default_factory=time.time)
+    last_interaction_time: Optional[float] = None
+    message_history: List[Dict[str, Any]] = field(default_factory=list)
+    
+    def add_message(self, sent_tokens: int, response_tokens: int) -> int:
+        """
+        Record a message exchange and return tokens used.
+        
+        Args:
+            sent_tokens: Token count of sent message
+            response_tokens: Token count of response
+            
+        Returns:
+            Total tokens used in this exchange
+        """
+        self.turn_count += 1
+        self.message_count += 1
+        self.last_interaction_time = time.time()
+        
+        tokens_used = sent_tokens + response_tokens
+        self.token_count += tokens_used
+        
+        self.message_history.append({
+            "turn": self.turn_count,
+            "timestamp": self.last_interaction_time,
+            "sent_tokens": sent_tokens,
+            "response_tokens": response_tokens,
+            "tokens_used": tokens_used,
+        })
+        
+        return tokens_used
+    
+    def reset(self) -> None:
+        """Reset all state for a new session."""
+        self.turn_count = 0
+        self.token_count = 0
+        self.message_count = 0
+        self.session_start_time = time.time()
+        self.last_interaction_time = None
+        self.message_history.clear()
+    
+    def get_duration_s(self) -> float:
+        """Get session duration in seconds."""
+        return time.time() - self.session_start_time
+    
+    def get_ctaw_usage_percent(self) -> float:
+        """
+        Calculate CTAW usage as a percentage.
+        
+        Formula: (TokenCount / CTAWSize) * 100
+        
+        Returns:
+            Percentage (0.0 to 100.0+)
+        """
+        if self.ctaw_size <= 0:
+            return 0.0
+        return (self.token_count / self.ctaw_size) * 100.0
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Export state as dictionary for status reporting."""
+        return {
+            "turn_count": self.turn_count,
+            "token_count": self.token_count,
+            "message_count": self.message_count,
+            "session_duration_s": round(self.get_duration_s(), 1),
+            "last_interaction_time": self.last_interaction_time,
+            "ctaw_size": self.ctaw_size,
+            "ctaw_usage_percent": round(self.get_ctaw_usage_percent(), 2),
+        }
+
+# =========================
+# Base AI Class
+# =========================
+
+class BaseAI(ABC):
+    """
+    Pure abstract base class for AI interactions.
+    
+    Defines WHAT operations are possible with an AI system,
+    without specifying HOW they're implemented.
+    
+    Key Principles:
+    - No references to transport mechanisms (CDP, HTTP, WebSocket, etc.)
+    - No references to implementation details (Playwright, browsers, etc.)
+    - Only logical AI operations (send message, list messages, etc.)
+    - Session state tracking is implementation-agnostic
+    
+    Subclasses implement specific transport mechanisms:
+    - WebAIBase: Browser automation via Playwright/CDP
+    - APIAIBase: Direct API calls via HTTP (future)
+    """
+
+    @property
+    def ai_target(self) -> str:
+        """Convenient read-only alias used by subclasses/logging."""
+        return self.get_ai_target()
+
+    @property
+    def config(self) -> Dict[str, Any]:
+        return self._config
+
+    
+    def __init__(self, config: Dict[str, Any]):
+        """
+        Initialize base AI.
+        
+        Args:
+            config: Configuration dict with required fields:
+                - ai_target: AI identifier (e.g., 'claude', 'chatgpt')
+                - max_context_tokens: Context window size
+        
+        Raises:
+            ValueError: If required config fields are missing
+        """
+        # Validate required config fields
+        if "ai_target" not in config:
+            raise ValueError("Config must include 'ai_target'")
+        if "max_context_tokens" not in config:
+            raise ValueError("Config must include 'max_context_tokens'")
+        
+        self._config = config
+        
+        # Set up logging
+        self._logger = logging.getLogger(f"{__name__}.{self.__class__.__name__}")
+        
+        # Initialize session state with CTAW size from config
+        self._session = SessionState(ctaw_size=config["max_context_tokens"])
+        
+        # Set up tokenizer (tiktoken if available, fallback to char/4)
+        self._tokenizer = None
+        if TIKTOKEN_AVAILABLE:
+            try:
+                self._tokenizer = tiktoken.get_encoding("cl100k_base")
+                self._logger.debug("Initialized tiktoken tokenizer")
+            except Exception as e:
+                self._logger.warning(f"Failed to initialize tiktoken: {e}")
+    
+    # =========================
+    # Core AI Operations (Abstract Interface)
+    # =========================
+    
+    @abstractmethod
+    async def send_prompt(
+        self,
+        message: str,
+        wait_for_response: bool = True,
+        timeout_s: int = 120
+    ) -> Tuple[bool, Optional[str], Optional[str], Optional[Dict[str, Any]]]:
+        """
+        Send a message to the AI and optionally wait for response.
+        
+        This is the primary interaction method. Subclasses implement
+        the actual transport mechanism (web automation, API call, etc.).
+        
+        Args:
+            message: Text to send to the AI
+            wait_for_response: Whether to wait for AI's reply
+            timeout_s: Maximum time to wait for response
+            
+        Returns:
+            Tuple of (success, snippet, full_response, metadata)
+            - success: True if message was sent (and response received if waiting)
+            - snippet: First ~280 chars of response (for display)
+            - full_response: Complete response text/markdown
+            - metadata: Dict with timing, token usage, etc.
+        """
+        pass
+    
+    @abstractmethod
+    async def list_messages(self) -> List[Dict[str, Any]]:
+        """
+        List all messages in the current conversation.
+        
+        Returns:
+            List of message dictionaries with keys:
+            - index: int (0-based)
+            - type: 'user' | 'assistant' | 'system'
+            - preview: str (first ~60 chars)
+            - length: int (character count)
+        """
+        pass
+    
+    @abstractmethod
+    async def extract_message(self, index: int) -> Optional[str]:
+        """
+        Extract the full content of a specific message.
+        
+        Args:
+            index: Message index from list_messages()
+            
+        Returns:
+            Full message content or None if not found
+        """
+        pass
+    
+    @abstractmethod
+    async def start_new_session(self) -> bool:
+        """
+        Start a new chat session/conversation.
+        
+        This resets the conversation history in the AI interface
+        and resets local session state tracking.
+        
+        Returns:
+            True if new session started successfully
+        """
+        pass
+    
+    @abstractmethod
+    def get_transport_status(self) -> Dict[str, Any]:
+        """
+        Get transport/connection status.
+        
+        This is implementation-specific (web has CDP info, API has endpoint info).
+        Subclasses must implement this to provide transport-layer details.
+        
+        Returns:
+            Dictionary with transport-specific status information
+        """
+        pass
+    
+    # =========================
+    # AI Status (Concrete Implementation)
+    # =========================
+    
+    def get_ai_status(self) -> AIStatus:
+        """
+        Get AI session status (implementation-agnostic).
+        
+        Returns universal AI metrics that apply regardless of
+        transport mechanism (web, API, etc.).
+        
+        Returns:
+            Dictionary with AI session information
+        """
+        return {
+            "ai_target": self.get_ai_target(),
+            **self._session.to_dict(),
+        }
+    
+    def get_ai_target(self) -> str:
+        """Get the AI target name (e.g., 'claude', 'chatgpt')."""
+        return self._config.get("ai_target", "unknown")
+    
+    # =========================
+    # Token Counting
+    # =========================
+    
+    def _count_tokens(self, text: str) -> int:
+        """
+        Count tokens in text using tiktoken or fallback.
+        
+        Args:
+            text: Text to count tokens in
+            
+        Returns:
+            Token count
+        """
+        if self._tokenizer:
+            try:
+                return len(self._tokenizer.encode(text))
+            except Exception as e:
+                self._logger.warning(f"Token counting failed: {e}")
+        
+        # Fallback: 4 chars ≈ 1 token
+        return len(text) // 4
+    
+    # =========================
+    # Protected Helpers for Subclasses
+    # =========================
+    
+    def _update_session_from_interaction(
+        self,
+        message: str,
+        response: str
+    ) -> Dict[str, Any]:
+        """
+        Update session state after a successful interaction.
+        
+        This is a helper method for subclasses to call after they've
+        successfully completed a send_prompt operation. Returns metadata
+        to be merged with transport-specific metadata.
+        
+        Args:
+            message: The sent message
+            response: The received response
+            
+        Returns:
+            Metadata dict with session information
+        """
+        # Count tokens
+        sent_tokens = self._count_tokens(message)
+        response_tokens = self._count_tokens(response)
+        
+        # Update session state
+        tokens_used = self._session.add_message(sent_tokens, response_tokens)
+        
+        # Build metadata
+        metadata = {
+            "timestamp": datetime.now(timezone.utc).isoformat().replace("+00:00", "Z"),
+            "turn_count": self._session.turn_count,
+            "message_count": self._session.message_count,
+            "token_count": self._session.token_count,
+            "tokens_used": tokens_used,
+            "sent_tokens": sent_tokens,
+            "response_tokens": response_tokens,
+            "ctaw_usage_percent": round(self._session.get_ctaw_usage_percent(), 2),
+            "ctaw_size": self._session.ctaw_size,
+            "session_duration_s": round(self._session.get_duration_s(), 1),
+        }
+        
+        self._logger.debug(
+            f"Turn: {self._session.turn_count}, "
+            f"Tokens: {self._session.token_count}, "
+            f"CTAW: {self._session.get_ctaw_usage_percent():.1f}%"
+        )
+        
+        return metadata
+    
+    def _reset_session_state(self) -> None:
+        """
+        Reset all session state (private - called by start_new_session).
+        
+        This clears turn counter, token counts, and message history.
+        Should only be called from start_new_session() implementation.
+        """
+        self._logger.info("Resetting session state")
+        self._session.reset()
+    
+    # =========================
+    # Configuration Access
+    # =========================
+    
+    def get_config(self) -> Dict[str, Any]:
+        """Get the full configuration dictionary."""
+        return self._config
+    
+    # =========================
+    # Class-level Configuration
+    # =========================
+    
+    @classmethod
+    @abstractmethod
+    def get_default_config(cls) -> Dict[str, Any]:
+        """
+        Get default configuration for this AI implementation.
+        
+        Returns:
+            Dict with ai_target, max_context_tokens, and implementation-specific settings
+        """
+        pass

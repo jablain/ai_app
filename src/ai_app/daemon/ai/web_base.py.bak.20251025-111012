@@ -1,0 +1,619 @@
+"""Base class for web-based AI providers"""
+
+import asyncio
+import time
+import logging
+from abc import abstractmethod
+from typing import Dict, Any, Optional, Tuple
+from datetime import datetime, timezone
+import uuid
+
+from playwright.async_api import Page
+
+from .base import BaseAI
+
+logger = logging.getLogger(__name__)
+
+
+def _iso_now() -> str:
+    """Return current UTC time as ISO 8601 string"""
+    return datetime.now(timezone.utc).isoformat()
+
+
+class WebAIBase(BaseAI):
+    """
+    Base class for web-based AI providers using Playwright automation.
+    
+    Handles CDP connection management, page interaction patterns,
+    and structured error reporting with stage logging.
+    """
+    
+    # Subclasses must define these selectors
+    INPUT_BOX: str
+    SEND_BUTTON: str
+    STOP_BUTTON: str
+    RESPONSE_CONTAINER: str
+    
+    def __init__(self, config: Dict[str, Any]):
+        super().__init__(config)
+        self.browser_pool = None  # Set via set_browser_pool()
+        
+        # CDP state
+        self._cdp_url: Optional[str] = None
+        self._cdp_source: Optional[str] = None
+        self._last_page_url: Optional[str] = None
+        
+        # Session state
+        self._session_active: bool = False
+        self._model_name_cache: Optional[str] = None
+        
+        # Concurrency safety
+        self._interaction_lock = asyncio.Lock()
+        
+        logger.info(f"WebAIBase initialized for {self.ai_target}")
+
+    
+    def set_browser_pool(self, browser_pool):
+        """Set the browser pool for CDP operations"""
+        self.browser_pool = browser_pool
+        logger.debug(f"{self.ai_target}: Browser pool set")
+    
+    def _err(self, code: str, message: str, *,
+             severity: str = "error",
+             suggested_action: str | None = None,
+             evidence: dict | None = None,
+             stage_log: dict | None = None) -> dict:
+        """
+        Create a structured error object.
+        
+        Args:
+            code: Short error code (e.g., "SELECTOR_MISSING", "RATE_LIMITED")
+            message: Human-readable error description
+            severity: One of "error", "warn", "info"
+            suggested_action: Brief guidance for user/system
+            evidence: Supporting data (selectors, URLs, snippets)
+            stage_log: Request stage timestamps
+            
+        Returns:
+            Structured error dict with keys: code, message, severity,
+            suggested_action, evidence, stage_log
+        """
+        return {
+            "code": code,
+            "message": message,
+            "severity": severity,
+            "suggested_action": suggested_action,
+            "evidence": evidence or {},
+            "stage_log": stage_log or {},
+        }
+    
+    async def _get_or_open_page(self, page_url_hint: str) -> Page:
+        """
+        Wrapper used by provider methods. Ensures we have a Page.
+        Uses the browser pool to reuse a matching page, or opens a new one.
+        """
+        page = await self._pick_page(page_url_hint)
+        if not page:
+            raise RuntimeError(f"{self.ai_target}: No page available for hint '{page_url_hint}'")
+        return page
+
+    async def _detect_page_state(self, page: Page, max_text_len: int = 300) -> dict | None:
+        """
+        Generic cross-site checks for auth walls, captcha, and rate limit banners.
+        
+        Scans for common patterns indicating login requirements, verification requests,
+        or rate limiting. Config-gated via features.suspicious_scan (default True).
+        
+        Args:
+            page: Playwright page to inspect
+            max_text_len: Max characters to extract from detected element
+            
+        Returns:
+            Dict with detection details (selector, text_snippet, page_url),
+            or None if nothing suspicious found
+        """
+        # Check config flag
+        if not self._config.get("features", {}).get("suspicious_scan", True):
+            return None
+        
+        candidates = [
+            # Auth / login
+            "input[type='password']",
+            "button:has-text('Sign in'), button:has-text('Log in'), a:has-text('Sign in'), a:has-text('Log in')",
+            # Captcha / verification
+            "iframe[src*='captcha']",
+            "div:has-text('verify you are human')",
+            # Rate limit / quota
+            "div:has-text('Too many requests'), div:has-text('rate limit'), div:has-text('concurrent')",
+            # Generic alerts / banners / toasts
+            "[role='alert']",
+            "div[data-testid='toast']",
+            "div[role='status']",
+        ]
+        
+        try:
+            for css in candidates:
+                loc = page.locator(css)
+                if await loc.count() > 0:
+                    text = ""
+                    try:
+                        text = (await loc.first.inner_text()) or ""
+                    except Exception:
+                        pass
+                    if len(text) > max_text_len:
+                        text = text[:max_text_len] + " …"
+                    return {
+                        "selector": css,
+                        "text_snippet": text,
+                        "page_url": page.url
+                    }
+        except Exception:
+            pass
+        
+        return None
+    
+    async def _guess_model_name(self, page: Page) -> str | None:
+        """
+        Best-effort model name detection from page content.
+        
+        Caches result on first success ("first-seen wins"). Subclasses can override
+        for provider-specific selectors.
+        
+        Args:
+            page: Playwright page to inspect
+            
+        Returns:
+            Model name string, or None if not detected
+        """
+        # Return cached value if available
+        if self._model_name_cache:
+            return self._model_name_cache
+        
+        try:
+            candidates = [
+                "[data-testid='model-label']",
+                "button:has-text('Model')",
+                "span:has-text('GPT')",
+                "span:has-text('Claude')",
+                "span:has-text('Gemini')",
+            ]
+            for css in candidates:
+                loc = page.locator(css)
+                if await loc.count() > 0:
+                    txt = (await loc.first.inner_text() or "").strip()
+                    if 2 <= len(txt) <= 80:
+                        self._model_name_cache = txt
+                        logger.info(f"{self.ai_target}: Detected model name: {txt}")
+                        return txt
+        except Exception as e:
+            logger.debug(f"{self.ai_target}: Model name detection failed: {e}")
+        
+        return None
+    
+    def _invalidate_model_cache(self):
+        """
+        Invalidate cached model name.
+        
+        Call this if the user switches models in the provider UI
+        and you want fresh detection on next interaction.
+        
+        Note: Default behavior is "first-seen wins" until explicitly invalidated.
+        """
+        self._model_name_cache = None
+        logger.debug(f"{self.ai_target}: Model name cache invalidated")
+    
+    def get_transport_status(self) -> Dict[str, Any]:
+        """
+        Get transport-level connection status.
+        
+        Returns:
+            Dict with CDP connection state, session activity, and model info:
+            - cdp_connected: bool (CDP URL known)
+            - session_active: bool (at least one successful interaction)
+            - connected: bool (legacy alias for cdp_connected)
+            - cdp_url: str | None
+            - cdp_source: str | None (discovered/configured)
+            - last_page_url: str | None
+            - model_name: str | None (cached)
+        """
+        return {
+            "transport_type": "web",
+            "cdp_connected": self._cdp_url is not None,
+            "session_active": self._session_active,
+            "connected": self._cdp_url is not None,  # legacy alias
+            "cdp_url": self._cdp_url,
+            "cdp_source": self._cdp_source,
+            "last_page_url": self._last_page_url,
+            "model_name": self._model_name_cache,
+        }
+    
+    async def _discover_cdp_url(self) -> Optional[str]:
+        """
+        Discover CDP WebSocket URL via browser pool.
+        
+        Returns:
+            WebSocket URL string, or None if discovery failed
+        """
+        if not self.browser_pool:
+            logger.error(f"{self.ai_target}: No browser pool available for CDP discovery")
+            return None
+        
+        try:
+            cdp_url = await self.browser_pool.get_cdp_url()
+            if cdp_url:
+                self._cdp_url = cdp_url
+                self._cdp_source = "discovered"
+                logger.info(f"{self.ai_target}: CDP discovered: {cdp_url}")
+            return cdp_url
+        except Exception as e:
+            logger.error(f"{self.ai_target}: CDP discovery failed: {e}")
+            return None
+    
+    async def _get_cdp_url(self) -> Optional[str]:
+        """
+        Get CDP URL, discovering if necessary.
+        
+        Returns:
+            Cached or newly discovered CDP URL
+        """
+        if self._cdp_url:
+            return self._cdp_url
+        return await self._discover_cdp_url()
+    
+    async def _pick_page(self, page_url_hint: str) -> Optional[Page]:
+        """
+        Pick appropriate page from browser pool.
+        
+        Args:
+            page_url_hint: URL pattern to match (e.g., "claude.ai")
+            
+        Returns:
+            Playwright Page, or None if unavailable
+        """
+        if not self.browser_pool:
+            logger.error(f"{self.ai_target}: No browser pool available")
+            return None
+        
+        cdp_url = await self._get_cdp_url()
+        if not cdp_url:
+            logger.error(f"{self.ai_target}: No CDP URL available")
+            return None
+        
+        try:
+            page = await self.browser_pool.get_page(cdp_url, page_url_hint)
+            if page:
+                self._last_page_url = page.url
+                logger.debug(f"{self.ai_target}: Got page: {page.url}")
+            return page
+        except Exception as e:
+            logger.error(f"{self.ai_target}: Failed to get page: {e}")
+            return None
+    
+    async def _ensure_chat_ready(self, page: Page) -> bool:
+        """
+        Ensure chat interface is ready for input.
+        
+        Also opportunistically captures model name on first success.
+        
+        Args:
+            page: Playwright page
+            
+        Returns:
+            True if input box is visible and ready
+        """
+        try:
+            input_box = page.locator(self.INPUT_BOX)
+            await input_box.wait_for(state="visible", timeout=5000)
+            
+            # Opportunistically capture model name (cached after first success)
+            try:
+                await self._guess_model_name(page)
+            except Exception:
+                pass
+            
+            return True
+        except Exception as e:
+            logger.warning(f"{self.ai_target}: Chat not ready: {e}")
+            return False
+    
+    @abstractmethod
+    async def _get_response_count(self, page: Page) -> int:
+        """Get current response message count (provider-specific)"""
+        pass
+    
+    @abstractmethod
+    async def _send_message(self, page: Page, message: str) -> bool:
+        """Send message to chat interface (provider-specific)"""
+        pass
+    
+    @abstractmethod
+    async def _wait_for_response_complete(self, page: Page, timeout_s: float) -> bool:
+        """Wait for response to complete (provider-specific)"""
+        pass
+    
+    @abstractmethod
+    async def _extract_response(self, page: Page, baseline_count: int) -> Tuple[str, str]:
+        """Extract response text and markdown (provider-specific)"""
+        pass
+    
+    @abstractmethod
+    def _get_page_url_hint(self) -> str:
+        """Get URL hint for page selection (provider-specific, e.g., 'claude.ai')"""
+        pass
+    
+    async def _execute_web_interaction(
+        self,
+        page: Page,
+        message: str,
+        wait_for_response: bool,
+        timeout_s: float
+    ) -> Tuple[bool, Optional[str], Optional[str], Dict[str, Any]]:
+        """
+        Execute a web interaction with comprehensive error handling and stage logging.
+        
+        Protected by per-instance lock to prevent concurrent interaction races.
+        Each request gets a unique request_id for tracing concurrent requests.
+        
+        Args:
+            page: Playwright page
+            message: Prompt text
+            wait_for_response: Whether to wait for completion
+            timeout_s: Wait timeout in seconds
+            
+        Returns:
+            Tuple of (success, snippet, markdown, metadata)
+            - success: bool
+            - snippet: str | None (short preview)
+            - markdown: str | None (full formatted response)
+            - metadata: dict with request_id, stage_log, warnings, error (if failed)
+        """
+        # Acquire lock to prevent concurrent interactions on same AI instance
+        async with self._interaction_lock:
+            request_id = str(uuid.uuid4())
+            stage_log = {
+                "request_id": request_id,
+                "send_start": _iso_now(),
+            }
+            warnings = []  # Always present, even if empty
+            
+            try:
+                # Ensure chat is ready
+                if not await self._ensure_chat_ready(page):
+                    stage_log["failure_stage"] = "ensure_ready"
+                    err = self._err(
+                        "SELECTOR_MISSING",
+                        "Chat input not ready (selector missing or not visible).",
+                        suggested_action="Reload the tab or log in again.",
+                        evidence={"page_url": page.url if page else None},
+                        stage_log=stage_log
+                    )
+                    return False, None, None, {
+                        "error": err,
+                        "waited": wait_for_response,
+                        "elapsed_ms": None,
+                        "timeout_s": timeout_s,
+                        "request_id": request_id,
+                        "warnings": warnings,
+                        "model_name": self._model_name_cache,
+                        "cdp_url": self._cdp_url,
+                    }
+                
+                # Detect suspicious page state before sending
+                suspicious = await self._detect_page_state(page)
+                if suspicious:
+                    txt = (suspicious.get("text_snippet") or "").lower()
+                    
+                    # Classify: hard errors vs warnings
+                    if any(k in txt for k in ["sign in", "log in", "verify you are human", "captcha"]):
+                        stage_log["failure_stage"] = "ensure_ready"
+                        err = self._err(
+                            "AUTH_REQUIRED",
+                            "The page appears to require login/verification.",
+                            suggested_action="Open the provider tab and complete sign-in.",
+                            evidence=suspicious,
+                            stage_log=stage_log
+                        )
+                        return False, None, None, {
+                            "error": err,
+                            "waited": False,
+                            "elapsed_ms": None,
+                            "timeout_s": timeout_s,
+                            "request_id": request_id,
+                            "warnings": warnings,
+                            "model_name": self._model_name_cache,
+                            "cdp_url": self._cdp_url,
+                        }
+                    
+                    if any(k in txt for k in ["too many", "rate limit", "concurrent"]):
+                        stage_log["failure_stage"] = "send"
+                        err = self._err(
+                            "RATE_LIMITED",
+                            "The provider indicates a rate limit or concurrent request cap.",
+                            suggested_action="Wait a bit and try again, or switch models.",
+                            evidence=suspicious,
+                            stage_log=stage_log
+                        )
+                        return False, None, None, {
+                            "error": err,
+                            "waited": False,
+                            "elapsed_ms": None,
+                            "timeout_s": timeout_s,
+                            "request_id": request_id,
+                            "warnings": warnings,
+                            "model_name": self._model_name_cache,
+                            "cdp_url": self._cdp_url,
+                        }
+                    
+                    # Non-critical: add as warning
+                    warnings.append(self._err(
+                        "SUSPICIOUS_PAGE_STATE",
+                        "Page shows a banner/alert; interaction may still succeed.",
+                        severity="warn",
+                        suggested_action="If results look off, re-auth the tab.",
+                        evidence=suspicious,
+                        stage_log=stage_log
+                    ))
+                
+                # Capture baseline response count
+                baseline_count = await self._get_response_count(page)
+                stage_log["baseline_count"] = baseline_count
+                
+                # Send message
+                if not await self._send_message(page, message):
+                    stage_log["failure_stage"] = "send"
+                    err = self._err(
+                        "SELECTOR_MISSING",
+                        "Failed to send message (input not fillable).",
+                        suggested_action="Reload the tab or log in again.",
+                        evidence={"page_url": page.url},
+                        stage_log=stage_log
+                    )
+                    return False, None, None, {
+                        "error": err,
+                        "waited": wait_for_response,
+                        "elapsed_ms": None,
+                        "timeout_s": timeout_s,
+                        "request_id": request_id,
+                        "warnings": warnings,
+                        "model_name": self._model_name_cache,
+                        "cdp_url": self._cdp_url,
+                    }
+                
+                stage_log["send_complete"] = _iso_now()
+                
+                # Wait for response if requested
+                snippet = markdown = None
+                elapsed_ms = None
+                
+                if wait_for_response:
+                    stage_log["wait_start"] = _iso_now()
+                    t0 = time.time()
+                    
+                    completed = await self._wait_for_response_complete(page, timeout_s)
+                    stage_log["wait_complete"] = _iso_now()
+                    
+                    if completed:
+                        snippet, markdown = await self._extract_response(page, baseline_count)
+                        stage_log["extract_done"] = _iso_now()
+                        
+                        # Check for empty response
+                        if not markdown or not markdown.strip():
+                            warnings.append(self._err(
+                                "EMPTY_RESPONSE",
+                                "Response completed but no content extracted.",
+                                severity="warn",
+                                suggested_action="Check the provider tab; may need to retry.",
+                                evidence={"page_url": page.url},
+                                stage_log=stage_log
+                            ))
+                    else:
+                        stage_log["failure_stage"] = "wait"
+                        err = self._err(
+                            "RESPONSE_TIMEOUT",
+                            f"Prompt sent, but no response completed within {timeout_s}s.",
+                            suggested_action="Try again or switch models.",
+                            evidence={"page_url": page.url, "selector": self.STOP_BUTTON},
+                            stage_log=stage_log
+                        )
+                        return False, None, None, {
+                            "error": err,
+                            "waited": True,
+                            "elapsed_ms": int((time.time() - t0) * 1000),
+                            "timeout_s": timeout_s,
+                            "request_id": request_id,
+                            "warnings": warnings,
+                            "model_name": self._model_name_cache,
+                            "cdp_url": self._cdp_url,
+                        }
+                    
+                    elapsed_ms = int((time.time() - t0) * 1000)
+                
+                # Build metadata
+                meta = {
+                    "elapsed_ms": elapsed_ms,
+                    "waited": wait_for_response,
+                    "timeout_s": timeout_s,
+                    "ws_source": self._cdp_source,
+                    "page_url": page.url,
+                    "stage_log": stage_log,
+                    "request_id": request_id,
+                    "warnings": warnings,
+                    "model_name": self._model_name_cache,
+                    "cdp_url": self._cdp_url,
+                }
+                
+                # Mark session as active after first successful send
+                self._session_active = True
+                
+                return True, snippet, markdown, meta
+            
+            except Exception as e:
+                stage_log["exception_time"] = _iso_now()
+                stage_log["failure_stage"] = "extract"
+                
+                # Classify exception type
+                err_str = str(e).lower()
+                if "target closed" in err_str or "connection closed" in err_str or "closed" in err_str:
+                    err_code = "CDP_DISCONNECTED"
+                    err_msg = "Browser connection dropped during interaction."
+                    suggested = "Restart the UI or daemon; check browser tabs."
+                else:
+                    err_code = "UNEXPECTED_EXCEPTION"
+                    err_msg = "Unexpected error during interaction."
+                    suggested = "Check daemon logs; may need to restart."
+                
+                err = self._err(
+                    err_code,
+                    err_msg,
+                    suggested_action=suggested,
+                    evidence={"exception": str(e), "exception_type": type(e).__name__},
+                    stage_log=stage_log
+                )
+                
+                return False, None, None, {
+                    "error": err,
+                    "waited": False,
+                    "elapsed_ms": None,
+                    "timeout_s": timeout_s,
+                    "request_id": request_id,
+                    "warnings": warnings,
+                    "model_name": self._model_name_cache,
+                    "cdp_url": self._cdp_url,
+                }
+    
+    async def send_prompt(
+        self,
+        prompt: str,
+        wait_for_response: bool = True,
+        timeout_s: float = 60.0,
+        **kwargs
+    ) -> Tuple[bool, Optional[str], Optional[str], Dict[str, Any]]:
+        """
+        Send a prompt to the AI and optionally wait for response.
+        
+        Args:
+            prompt: The message to send
+            wait_for_response: Whether to wait for completion
+            timeout_s: Timeout for waiting
+            **kwargs: Additional provider-specific options
+            
+        Returns:
+            Tuple of (success, snippet, markdown, metadata)
+        """
+        # Get page using provider-specific URL hint
+        page = await self._pick_page(self._get_page_url_hint())
+        if not page:
+            return False, None, None, {
+                "error": self._err(
+                    "CDP_UNAVAILABLE",
+                    "No browser page available.",
+                    suggested_action="Ensure browser is running and tabs are open.",
+                    evidence={}
+                ),
+                "warnings": [],
+                "timeout_s": timeout_s,
+            }
+        
+        return await self._execute_web_interaction(
+            page, prompt, wait_for_response, timeout_s
+        )
