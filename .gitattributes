@@ -1,0 +1,75 @@
+###############################################################################
+# Git Attributes for Modern Python Projects (Linux focus)
+# Complements .gitignore by controlling text normalization, linguist stats,
+# binary handling, and archive/export behavior.
+###############################################################################
+
+# --- Line endings normalization ---
+# Enforce LF line endings for all text files (cross-platform safe).
+* text eol=lf
+
+# --- Binary / Non-text files ---
+# Prevent Git from diffing or merging binary files.
+*.png  binary
+*.jpg  binary
+*.jpeg binary
+*.gif  binary
+*.svg  binary
+*.ico  binary
+*.pdf  binary
+*.ttf  binary
+*.woff binary
+*.woff2 binary
+*.zip  binary
+*.tar  binary
+*.gz   binary
+
+# --- Documentation and Generated Reports ---
+# Documentation counts as docs for GitHub Linguist
+docs/** linguist-documentation
+
+# Project reports are generated artifacts; exclude from archives
+project_reports/** linguist-generated
+project_reports/** export-ignore
+
+# --- Runtime Artifacts ---
+# Runtime data/logs/configs should never be part of archives
+runtime/** export-ignore
+
+# --- Ignore internal dev configs when archiving ---
+.gitignore              export-ignore
+.gitattributes          export-ignore
+.pre-commit-config.yaml export-ignore
+.editorconfig           export-ignore
+.tox/                   export-ignore
+.nox/                   export-ignore
+.vscode/                export-ignore
+.idea/                  export-ignore
+.github/                export-ignore
+
+# --- Treat structured text formats as plain text for diffs ---
+*.json text
+*.toml text
+*.yaml text
+*.yml  text
+
+# --- Assets / Front-end files (if added later) ---
+*.js   text
+*.ts   text
+*.css  text
+*.html text
+
+# --- Mark generated text files (reports only) as neutral for Linguist ---
+project_reports/**/*.txt linguist-generated
+
+# --- Cache directories ---
+.cache/** linguist-generated
+
+###############################################################################
+# Notes:
+# - Keeps cross-platform line endings consistent (LF only).
+# - Protects binaries from corruption in diffs.
+# - Excludes runtime and generated data from source archives.
+# - Improves GitHub language stats accuracy.
+###############################################################################
+
