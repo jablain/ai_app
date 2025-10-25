@@ -1,55 +1,81 @@
-# Runtime directories - NEVER commit these (contain user data)
+# --- Runtime & generated reports ---
 runtime/
+project_reports/
 
-# Python
+# --- Python ---
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
 *.egg-info/
+.eggs/
 dist/
 build/
-*.egg
+.wheelhouse/
+pip-wheel-metadata/
 
-# Virtual environments
+# --- Virtual environments ---
 .venv/
 venv/
 ENV/
 env/
 
-# IDE / Editors
+# --- IDE / Editors ---
 .vscode/
 .idea/
 *.swp
 *.swo
 *~
 
-# Logs
-*.log
-logs/
-
-# Backups
-*.bak
-*.backup
-*_backup_*/
-
-# OS files
+# --- OS files ---
 Thumbs.db
 .DS_Store
 
-# Sensitive data
+# --- Logs ---
+*.log
+logs/
+
+# --- Backups / temps ---
+*.bak
+*.backup
+*_backup_*/
+*.tmp
+*.temp
+.cache/
+
+# --- Sensitive (keep a sample) ---
 *.pem
 *.key
 secrets.json
 credentials.json
+.env
+!.env.example
 
-# Test files
+# --- Tests / coverage ---
 .pytest_cache/
+.tox/
+.nox/
 .coverage
+.coverage.*
 htmlcov/
+coverage.xml
+junit*.xml
 
-# Temporary files
-*.tmp
-*.temp
-.cache/
+# --- Type checkers / linters / tools ---
+.mypy_cache/
+.dmypy.json
+.pyre/
+.pytype/
+.ruff_cache/
+
+# --- Notebooks ---
+.ipynb_checkpoints/
+
+# --- Docs builds ---
+docs/_build/
+site/
+
+# --- Optional: local python version (pyenv); keep if you want to enforce it
+.python-version
+
