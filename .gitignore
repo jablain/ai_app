@@ -1,81 +1,149 @@
-# --- Runtime & generated reports ---
-runtime/
-project_reports/
-
-# --- Python ---
+# =========================================
+# Python build and cache artifacts
+# =========================================
 __pycache__/
 *.py[cod]
 *$py.class
-*.so
-.Python
-*.egg-info/
-.eggs/
-dist/
-build/
-.wheelhouse/
-pip-wheel-metadata/
 
-# --- Virtual environments ---
+# C extensions
+*.so
+
+# Distribution / packaging
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
+*.whl
+
+# =========================================
+# Virtual environments
+# =========================================
 .venv/
 venv/
-ENV/
 env/
+ENV/
+pip-wheel-metadata/
+pip-log.txt
+.poetry/
+.hatch/
+.pdm.toml
+__pypackages__/
 
-# --- IDE / Editors ---
-.vscode/
-.idea/
-*.swp
-*.swo
-*~
-
-# --- OS files ---
-Thumbs.db
-.DS_Store
-
-# --- Logs ---
-*.log
+# =========================================
+# Reports, logs, runtime data
+# =========================================
+project_reports/
 logs/
+*.log
 
-# --- Backups / temps ---
-*.bak
-*.backup
-*_backup_*/
-*.tmp
-*.temp
-.cache/
-
-# --- Sensitive (keep a sample) ---
-*.pem
-*.key
-secrets.json
-credentials.json
-.env
-!.env.example
-
-# --- Tests / coverage ---
-.pytest_cache/
+# =========================================
+# Test and coverage
+# =========================================
+htmlcov/
 .tox/
 .nox/
 .coverage
 .coverage.*
-htmlcov/
+.cache/
+.pytest_cache/
+nosetests.xml
 coverage.xml
-junit*.xml
+*.cover
+*.py,cover
+.hypothesis/
+.junit.xml
 
-# --- Type checkers / linters / tools ---
+# =========================================
+# Type checking, linting, profiling
+# =========================================
 .mypy_cache/
 .dmypy.json
 .pyre/
 .pytype/
 .ruff_cache/
+.prof
+.profraw
 
-# --- Notebooks ---
-.ipynb_checkpoints/
+# =========================================
+# Editors / IDEs
+# =========================================
+.vscode/
+.idea/
+*.sublime-project
+*.sublime-workspace
+*~
+.#*
+*.swp
+*.swo
+.session.vim
+*.user
+*.suo
 
-# --- Docs builds ---
+# =========================================
+# OS-specific
+# =========================================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+Icon?
+.Trashes
+*.lnk
+
+# =========================================
+# Linux XDG Base Directories (runtime/config/cache)
+# =========================================
+.cache/
+.config/
+.local/share/
+state/
+
+# =========================================
+# Development scripts / temp
+# =========================================
+tmp/
+temp/
+*.bak
+*.old
+*.orig
+*.rej
+*.tmp
+*.swp
+
+# =========================================
+# Docs build outputs
+# =========================================
 docs/_build/
 site/
+book/
+*.pdf
 
-# --- Optional: local python version (pyenv); keep if you want to enforce it
-.python-version
+# =========================================
+# Backup or generated assets
+# =========================================
+assets/generated/
+assets/tmp/
+
+# =========================================
+# Node / frontend (if any UI frontend appears)
+# =========================================
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# =========================================
+# End of file
+# =========================================
 

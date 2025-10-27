@@ -1,0 +1,9 @@
+2025/10/24-10:31:21.733 6 Reusing MANIFEST /home/jacques/dev/ai_app/runtime/daemon/browser/profiles/multi_ai_cdp/Default/Local Storage/leveldb/MANIFEST-000001
+2025/10/24-10:31:21.737 6 Recovering log #94
+2025/10/24-10:31:21.738 6 Reusing old log /home/jacques/dev/ai_app/runtime/daemon/browser/profiles/multi_ai_cdp/Default/Local Storage/leveldb/000094.log 
+2025/10/24-10:32:21.740 6 Level-0 table #99: started
+2025/10/24-10:32:21.745 6 Level-0 table #99: 22406 bytes OK
+2025/10/24-10:32:21.750 6 Delete type=0 #94
+2025/10/24-14:17:45.659 6 Level-0 table #101: started
+2025/10/24-14:17:45.663 6 Level-0 table #101: 17641 bytes OK
+2025/10/24-14:17:45.669 6 Delete type=0 #98

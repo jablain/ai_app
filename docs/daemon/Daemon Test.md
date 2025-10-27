@@ -414,7 +414,7 @@ javascript
 
 ```javascript
 // In browser console on claude.ai:
-document.body.insertAdjacentHTML('beforeend', 
+document.body.insertAdjacentHTML('beforeend',
   '<div role="alert">Too many requests. Please try again later.</div>');
 ```
 
@@ -1682,7 +1682,7 @@ resp=$(curl -s -X POST http://localhost:8000/send \
 if echo "$resp" | jq -e '.success == false'; then
   elapsed=$(echo "$resp" | jq '.metadata.elapsed_ms')
   echo "Elapsed: $elapsed ms"
-  
+
   # Should be approximately 2500ms (±200ms)
   if [ "$elapsed" -ge 2300 ] && [ "$elapsed" -le 2700 ]; then
     echo "✅ Elapsed time matches timeout"
@@ -2305,11 +2305,11 @@ total=20
 run_test() {
   local num=$1
   local name=$2
-  
+
   echo "=================================================="
   echo "Test $num/$total: $name"
   echo "=================================================="
-  
+
   # Tests require manual intervention - just list them
   echo "Run this test manually following the test plan"
   echo ""

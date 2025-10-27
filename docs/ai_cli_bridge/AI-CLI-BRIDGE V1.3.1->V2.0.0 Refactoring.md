@@ -23,18 +23,18 @@ The application is split into two asynchronous components communicating via a lo
 ### 2.1. The AI Daemon (Server)
 
 - **Role:** Long-lived, persistent background process.
-    
+
 - **Lifecycle:** Starts with `daemon start` and stops with `daemon stop`.
-    
+
 - **Core Responsibility:** Hosts the persistent, stateful `BaseAI` descendant objects. Manages the browser session (CDP).
-    
+
 
 ### 2.2. The CLI Commands (Client)
 
 - **Role:** Lightweight process that runs for a moment.
-    
+
 - **Core Responsibility:** Parses user input and immediately sends an HTTP request to the running Daemon. Prints the resulting data from the Daemon and exits.
-    
+
 
 ## 3. DAEMON CORE RESPONSIBILITIES (AI Session Manager)
 
@@ -43,18 +43,18 @@ The Daemon manages the following critical components:
 ### A. Browser Session and Concurrency
 
 - **CDP Browser Management:** The Daemon is the _only_ component responsible for launching the persistent Chromium instance using the shared profile (the current `init-cdp` shell script logic will be absorbed here).
-    
+
 - **AI Object Instantiation:** Creates **one long-lived instance** of every available AI (`claude`, `gemini`, etc.) on startup.
-    
+
 - **Concurrency Locking:** An `asyncio.Lock` will be created for _each_ AI instance. All browser interactions by that AI must acquire its specific lock before proceeding, preventing simultaneous execution and race conditions.
-    
+
 
 ### B. Session State and Management
 
 - **Predictable Start:** Upon daemon launch, an **explicit `session new <ai_name>`** command will be executed for every instantiated AI. This guarantees a clean starting state and accurate local counters.
-    
+
 - **API Exposure:** The Daemon exposes all state (counters, usage %) and capabilities (send, switch) via FastAPI endpoints.
-    
+
 
 ## 4. API ENDPOINTS AND CLIENT ROUTING
 
@@ -74,14 +74,14 @@ The Daemon will run a local FastAPI web server to handle all requests. The CLI c
 ### 5.1. Process Management & Logging (PID)
 
 - **Daemon PID File:** Will be stored at `~/dev/ai_app/ai-cli-bridge/runtime/daemon.pid`. The `daemon start` command will write its PID here.
-    
+
 - **Daemon Logging:** All background output will be redirected to `~/dev/ai_app/ai-cli-bridge/runtime/logs/daemon.log` for debugging.
-    
+
 
 ### 5.2. Configuration
 
 - Configuration will be loaded from a file (e.g., `daemon_config.toml` in `runtime/config`) to set persistent values like the Daemon's API **port (Default: 8000)** and logging level.
-    
+
 
 ### 5.3. Warning Codes
 

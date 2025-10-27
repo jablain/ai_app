@@ -1,0 +1,34 @@
+[daemon]
+host = "127.0.0.1"
+port = 8000
+log_level = "INFO"
+
+[cdp]
+port = 9223
+profile_dir = "~/dev/ai_app/runtime/browser/profiles/multi_ai_cdp"
+cmd = "flatpak run --socket=wayland --share=network io.github.ungoogled_software.ungoogled_chromium"
+start_timeout_s = 15.0
+probe_timeout_s = 2.0
+probe_interval_s = 0.5
+
+[cdp.health]
+poll_interval_s = 3.0
+fail_threshold = 3
+shutdown_wait_s = 10.0
+
+[cdp.start_urls]
+claude = "https://claude.ai/new"
+gemini = "https://gemini.google.com/app"
+chatgpt = "https://chatgpt.com"
+
+[features]
+token_align_frequency = 5000
+
+[ai.claude]
+transport = "web"   # current default/only implemented transport
+
+[ai.chatgpt]
+transport = "web"
+
+[ai.gemini]
+transport = "web"

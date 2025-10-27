@@ -3,9 +3,9 @@
 
 ## Software Architecture Design Document
 
-**Version:** 2.0.0  
-**Release Date:** October 18, 2025  
-**Status:** Production Ready  
+**Version:** 2.0.0
+**Release Date:** October 18, 2025
+**Status:** Production Ready
 **Document Classification:** Technical Architecture Specification
 
 ---
@@ -205,7 +205,7 @@ System operable immediately after installation:
 - **Namespace Isolation**: Package name matches project, preventing import conflicts
 - **Logical Grouping**: Subsystems (`daemon/`, `ai/`, `commands/`) clearly separated
 - **Import Clarity**: All imports use fully-qualified names from package root
-    
+
     ```python
     from ai_cli_bridge.ai.factory import AIFactoryfrom ai_cli_bridge.daemon import config
     ```
@@ -224,11 +224,11 @@ System operable immediately after installation:
 
 - **Separation of Code & Data**: Source immutable; runtime data mutable
 - **Gitignore Simplicity**: Single pattern excludes all runtime artifacts
-    
+
     ```
     runtime/
     ```
-    
+
 - **Backup/Restore**: Single directory contains all state
 - **Security**: Sensitive data (cookies, PIDs) contained in known location
 
@@ -561,7 +561,7 @@ Each command implemented as separate module in `commands/`:
 
 ```python
 # commands/send_cmd.py
-def run(ai_name: str, message: str, wait: bool, timeout: int, 
+def run(ai_name: str, message: str, wait: bool, timeout: int,
         json: bool, debug: bool) -> int:
     """Execute send command, return exit code."""
     # 1. Load config
@@ -839,10 +839,10 @@ BaseAI (abstract)
 ```python
 async def send_prompt(message, wait_for_response, timeout_s):
     """Template method: Connect → Pick Page → Execute → Track"""
-    
+
 async def get_status():
     """Return connection state, token counts, CTAW usage"""
-    
+
 def reset_session_state():
     """Clear all counters, restart session timer"""
 ```
@@ -880,14 +880,14 @@ ctaw_usage = (self._token_count / self._ctaw_size) * 100
 async def _wait_for_response_complete(page, timeout_s):
     # Wait for stop button to appear (generation started)
     await page.wait_for_selector(STOP_BUTTON, state="visible")
-    
+
     # Poll until stop button disappears (generation complete)
     deadline = time.time() + timeout_s
     while time.time() < deadline:
         if await page.locator(STOP_BUTTON).count() == 0:
             return True  # Complete!
         await asyncio.sleep(0.2)
-    
+
     return False  # Timeout
 ```
 
@@ -908,7 +908,7 @@ async def _wait_for_response_complete(page, timeout_s):
 
 #### 5.4.1 ClaudeAI
 
-**File Size**: 60 lines  
+**File Size**: 60 lines
 **Unique Logic**: None (uses all WebAIBase defaults)
 
 **Configuration**:
@@ -930,7 +930,7 @@ RESPONSE_CONTENT = ".standard-markdown"
 
 #### 5.4.2 GeminiAI
 
-**File Size**: 60 lines  
+**File Size**: 60 lines
 **Unique Logic**: None (uses all WebAIBase defaults)
 
 **Configuration**:
@@ -952,7 +952,7 @@ RESPONSE_CONTENT = "div.markdown"
 
 #### 5.4.3 ChatGPTAI
 
-**File Size**: 90 lines  
+**File Size**: 90 lines
 **Unique Logic**: Custom `_ensure_chat_ready()` and `_send_message()`
 
 **Why Custom?**: ChatGPT uses a hidden textarea (`display: none`) for accessibility, requiring special handling.
@@ -999,18 +999,18 @@ async def _send_message(page, message):
 ```python
 class AIFactory:
     _registry: Dict[str, type[BaseAI]] = {}
-    
+
     @classmethod
     def register(cls, ai_name: str, ai_class: type[BaseAI]):
         """Register AI implementation"""
         cls._registry[ai_name.lower()] = ai_class
-    
+
     @classmethod
     def create(cls, ai_name: str, config: Dict) -> BaseAI:
         """Create AI instance"""
         ai_class = cls._registry[ai_name.lower()]
         return ai_class(config)
-    
+
     @classmethod
     def import_all_ais(cls):
         """Trigger registration by importing modules"""
@@ -1459,7 +1459,7 @@ Enables true parallelism per AI, but increases resource usage.
 
 ### 9.1 Phase 4: Enhanced Session Management
 
-**Timeline**: Q1 2026  
+**Timeline**: Q1 2026
 **Status**: Design Phase
 
 #### 9.1.1 Conversation Navigation
@@ -1471,7 +1471,7 @@ Enables true parallelism per AI, but increases resource usage.
 ```bash
 # List all conversations for an AI
 ai-cli-bridge session list claude
-# Output: 
+# Output:
 #   1. [2025-10-15] "Discuss Python architecture" (47 messages)
 #   2. [2025-10-14] "Debug async code" (23 messages)
 #   ...
@@ -1551,13 +1551,13 @@ ai-cli-bridge session analyze claude
 #     Messages 1-10: 45,000 tokens
 #     Messages 11-20: 89,000 tokens (oldest, candidate for summarization)
 #     Messages 21-30: 50,000 tokens (most recent)
-#   
+#
 #   Recommendation: Summarize messages 11-20 (save ~70K tokens)
 ```
 
 ### 9.2 Phase 5: File Operations
 
-**Timeline**: Q2 2026  
+**Timeline**: Q2 2026
 **Status**: Planning
 
 #### 9.2.1 File Upload Support
@@ -1653,7 +1653,7 @@ ai-cli-bridge artifacts clean --older-than 30days
 
 ### 9.3 Phase 6: User Experience Enhancements
 
-**Timeline**: Q3 2026  
+**Timeline**: Q3 2026
 **Status**: Conceptual
 
 #### 9.3.1 Intelligent Error Recovery
@@ -1782,7 +1782,7 @@ This wizard will help you set up the system.
     • Claude (https://claude.ai)
     • Gemini (https://gemini.google.com)
     • ChatGPT (https://chatgpt.com)
-  
+
   Press Enter when done...
   ✓ All AIs authenticated
 
@@ -1801,7 +1801,7 @@ This wizard will help you set up the system.
 
 ### 9.4 Phase 7: Graphical User Interface
 
-**Timeline**: Q4 2026  
+**Timeline**: Q4 2026
 **Status**: Design Phase
 
 #### 9.4.1 Architecture Overview
@@ -2203,7 +2203,7 @@ from .factory import AIFactory
 class NewAI(WebAIBase):
     BASE_URL = "https://newai.example.com"
     CDP_PORT = 9223
-    
+
     @classmethod
     def get_default_config(cls) -> Dict[str, Any]:
         return {
@@ -2212,23 +2212,23 @@ class NewAI(WebAIBase):
             "cdp": {"port": cls.CDP_PORT},
             "max_context_tokens": 100000
         }
-    
+
     @property
     def INPUT_BOX(self) -> str:
         return "textarea#prompt"
-    
+
     @property
     def STOP_BUTTON(self) -> str:
         return "button[aria-label='Stop']"
-    
+
     @property
     def NEW_CHAT_BUTTON(self) -> str:
         return "button.new-chat"
-    
+
     @property
     def RESPONSE_CONTAINER(self) -> str:
         return "div.message"
-    
+
     @property
     def RESPONSE_CONTENT(self) -> str:
         return "div.content"
@@ -2518,7 +2518,7 @@ The roadmap outlined in this document provides a clear path forward, with each p
 6. **Future**: Session management, file operations, GUI, enhanced UX
 
 ---
-**Document Prepared By**: AI-CLI-Bridge Team  
-**Last Updated**: October 18, 2025  
-**Document Version**: 1.0  
+**Document Prepared By**: AI-CLI-Bridge Team
+**Last Updated**: October 18, 2025
+**Document Version**: 1.0
 **Next Review**: January 2026# AI-CLI-Bridge v2.0.0

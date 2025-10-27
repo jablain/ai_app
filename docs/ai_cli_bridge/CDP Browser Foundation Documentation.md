@@ -505,7 +505,7 @@ For issues with CDP browser infrastructure:
 
 ---
 
-**Document Version**: 1.0  
-**Last Updated**: 2025-10-17  
-**Author**: AI-CLI-Bridge Team  
+**Document Version**: 1.0
+**Last Updated**: 2025-10-17
+**Author**: AI-CLI-Bridge Team
 **Status**: Production Ready

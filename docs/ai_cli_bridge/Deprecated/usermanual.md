@@ -1,8 +1,8 @@
 
 # AI-CLI-Bridge — User Manual (v1.3.1)
 
-Date: 2025-10-08  
-Spec Alignment: AI-CLI-Bridge Design Specs v1.3 / Code Specs v1.3.1  
+Date: 2025-10-08
+Spec Alignment: AI-CLI-Bridge Design Specs v1.3 / Code Specs v1.3.1
 Platform: Linux (Pop!_OS 22.04 baseline). macOS/Windows may work but are not officially supported in v1.x.
 
 ---
@@ -127,7 +127,7 @@ Example (Claude):
            "browser_launch": 30,
            "page_load": 60,
            "response_wait": 120,
-           "file_upload": 30, 
+           "file_upload": 30,
            "response_stability_ms": 2000
        },
        "cdp": {
@@ -155,7 +155,7 @@ Example (Claude):
     - browser_launch, page_load: 5–120s
     - response_wait: 10–600s
 - Unknown fields → warning; ignored
-- Env var overrides: flat names (e.g., AI_CLI_BRIDGE_TIMEOUT_PAGE_LOAD=45). Selectors are not overrideable by env.
+- Env var overrides: flat names (e.g., AI_CLI_BRIDGE_TIMEOUT_PAGE_LOAD=45). Selectors are not overridable by env.
 
 ---
 ## 6) Lock File Protocol
@@ -164,12 +164,12 @@ Path: ~/.ai_cli_bridge/cache/locks/<AI_NAME>.lock
 
 - Atomic create: O_CREAT | O_EXCL → write JSON → fsync → close
 - Format (example):
-    {  
-    "version": "1.0",  
-    "pid": 23412,  
-    "created_at": "2025-10-08T14:23:11Z",  
-    "ai_target": "claude",  
-    "conversation_url": "[https://claude.ai/chat/xyz123](https://claude.ai/chat/xyz123)"  
+    {
+    "version": "1.0",
+    "pid": 23412,
+    "created_at": "2025-10-08T14:23:11Z",
+    "ai_target": "claude",
+    "conversation_url": "[https://claude.ai/chat/xyz123](https://claude.ai/chat/xyz123)"
     }
 - Stale if PID is dead or file > 24h old
 - open --force removes stale lock and proceeds
@@ -283,7 +283,7 @@ Behavior:
 - Click send_button
 - Wait for completion using Spinner + Stability
 
-Timeouts: file_upload, response_wait, response_stability_ms  
+Timeouts: file_upload, response_wait, response_stability_ms
 On response_wait timeout: exit 0 with a warning (streaming-friendly)
 ### 10.4 list
 
@@ -298,7 +298,7 @@ Behavior:
 
 Text output sample:
 
-[0] text: "What is the capital of France?" 
+[0] text: "What is the capital of France?"
 [1]   text: "The capital of France is Paris. Paris has been..."
 [2] canvas: "React Component - TodoApp"
 [3] image: "data:image/png;base64,iVBOR..."
@@ -407,22 +407,22 @@ First fatal error determines exit code; warnings don’t change it.
 ---
 ## 14) Troubleshooting & FAQs
 
-• Stuck in “prove you’re human”  
+• Stuck in “prove you’re human”
 – Prefer CDP mode with a trusted, headed browser profile (init-cdp). Avoid unnecessary reloads; open won’t navigate if already on a Claude route.
 
-• Headless forbidden error (E001)  
+• Headless forbidden error (E001)
 – Ensure DISPLAY or WAYLAND_DISPLAY is set and you’re not forcing headless in config/code.
 
-• Selectors changed after a site update  
+• Selectors changed after a site update
 – Run doctor; adjust selectors in your config file; re-try.
 
-• File upload errors (E009)  
+• File upload errors (E009)
 – Ensure file < 10MB; path exists; input selector is correct; wait for upload_confirmation.
 
-• JSON output shape  
+• JSON output shape
 – list --json returns a raw array by default. Add --envelope to wrap responses in {status,timestamp,data}.
 
-• Locks never clear  
+• Locks never clear
 – Use open --force to remove stale lock; investigate if a stray process is holding it.
 
 ---
@@ -431,44 +431,44 @@ First fatal error determines exit code; warnings don’t change it.
 Goal: Operate Claude via CDP with a dedicated persistent profile.
 
 1. Configure the cdp block in ~/.ai_cli_bridge/config/claude.json:
-    
-    "cdp": {  
-     "enable_autostart": true,  
-     "launcher": "playwright",  
-     "port": 9223,  
-     "wait_seconds": 12,  
-     "user_data_dir": "/home/you/.ai_cli_bridge/data/profiles/claude_cdp_pw",  
-     "startup_urls": [  
-         "[https://claude.ai/chat](https://claude.ai/chat)",  
-         "[https://chat.openai.com](https://chat.openai.com)",  
-         "[https://gemini.google.com](https://gemini.google.com)"  
-     ]  
+
+    "cdp": {
+     "enable_autostart": true,
+     "launcher": "playwright",
+     "port": 9223,
+     "wait_seconds": 12,
+     "user_data_dir": "/home/you/.ai_cli_bridge/data/profiles/claude_cdp_pw",
+     "startup_urls": [
+         "[https://claude.ai/chat](https://claude.ai/chat)",
+         "[https://chat.openai.com](https://chat.openai.com)",
+         "[https://gemini.google.com](https://gemini.google.com)"
+     ]
     }
-    
+
 2. Launch CDP browser and export ws URL:
-    
-    ai-cli-bridge init-cdp claude  
+
+    ai-cli-bridge init-cdp claude
     export AI_CLI_BRIDGE_CDP_URL="$(curl -s [http://127.0.0.1:9223/json/version](http://127.0.0.1:9223/json/version) | jq -r .webSocketDebuggerUrl)"
-    
+
 3. Attach and verify readiness:
-    
+
     ai-cli-bridge open claude --conversation "[https://claude.ai/chat](https://claude.ai/chat)"
-    
+
     # ✓ Browser launched
     # ✓ Loaded: [https://claude.ai/new](https://claude.ai/new)
     # ✓ Ready (auth verified)
-    
+
 4. Operate (examples, if implemented):
-    
-    ai-cli-bridge send "Analyze this CSV" --attach ~/report.csv  
-    ai-cli-bridge list --json  
+
+    ai-cli-bridge send "Analyze this CSV" --attach ~/report.csv
+    ai-cli-bridge list --json
     ai-cli-bridge extract 2 > artifact.html
-    
+
 5. Diagnostics:
-    
-    ai-cli-bridge doctor  
+
+    ai-cli-bridge doctor
     ai-cli-bridge status --json
-    
+
 1. Shutdown:
 
 - Close the CDP browser window (graceful). Next open will recover/clean stale locks as needed.
