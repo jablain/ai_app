@@ -365,7 +365,9 @@ def stop_daemon(
         time.sleep(0.5)
         cdp_port = config.cdp.port
         try:
-            response = requests.get(f"http://127.0.0.1:{cdp_port}/json/version", timeout=1.0)
+            _ = requests.get(
+                f"http://127.0.0.1:{cdp_port}/json/version", timeout=1.0
+            )  # Check if CDP responding
             typer.secho(
                 f"  Warning: CDP still responding on port {cdp_port}",
                 fg=typer.colors.YELLOW,

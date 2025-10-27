@@ -100,16 +100,16 @@ class AIFactory:
         # The import statements will trigger the AIFactory.register() calls
         # at the bottom of each AI module
         try:
-            from . import claude
+            from . import claude  # noqa: F401
         except ImportError as e:
             print(f"Warning: Could not import claude: {e}")
 
         try:
-            from . import gemini
+            from . import gemini  # noqa: F401
         except ImportError as e:
             print(f"Warning: Could not import gemini: {e}")
 
         try:
-            from . import chatgpt
+            from . import chatgpt  # noqa: F401
         except ImportError as e:
             print(f"Warning: Could not import chatgpt: {e}")
