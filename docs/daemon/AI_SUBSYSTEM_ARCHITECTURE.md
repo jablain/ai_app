@@ -1,7 +1,7 @@
 # AI Subsystem Architecture Documentation
 
-**Project:** AI-App v2.0.0  
-**Last Updated:** October 27, 2025  
+**Project:** AI-App v2.0.0
+**Last Updated:** October 27, 2025
 **Subsystem:** `src/daemon/ai/`
 
 ---
@@ -171,7 +171,7 @@ Encapsulates all session tracking without knowing HOW operations are performed.
 @dataclass
 class SessionState:
     """Self-contained session tracking."""
-    
+
     turn_count: int = 0
     token_count: int = 0
     message_count: int = 0
@@ -199,14 +199,14 @@ Defines **WHAT** operations are possible with an AI system, without specifying *
 
 ```python
 async def send_prompt(
-    self, 
-    message: str, 
-    wait_for_response: bool = True, 
+    self,
+    message: str,
+    wait_for_response: bool = True,
     timeout_s: int = 120
 ) -> tuple[bool, str | None, str | None, dict[str, Any]]:
     """
     Send message and optionally wait for response.
-    
+
     Returns:
         (success, snippet, full_response, metadata)
     """
@@ -242,7 +242,7 @@ def get_ai_status(self) -> AIStatus:
 def _count_tokens(self, text: str) -> int:
     """
     Count tokens using tiktoken or fallback.
-    
+
     If tiktoken available: accurate token count
     Fallback: len(text) // 4 (rough approximation)
     """
@@ -251,19 +251,19 @@ def _count_tokens(self, text: str) -> int:
     return len(text) // 4
 
 def _update_session_from_interaction(
-    self, 
-    message: str, 
+    self,
+    message: str,
     response: str
 ) -> dict[str, Any]:
     """
     Update session state after interaction.
-    
+
     Returns metadata dict with token counts.
     """
     sent_tokens = self._count_tokens(message)
     response_tokens = self._count_tokens(response)
     tokens_used = self._session.add_message(sent_tokens, response_tokens)
-    
+
     return {
         "turn_count": self._session.turn_count,
         "message_count": self._session.message_count,
@@ -301,20 +301,20 @@ All three adapters (Claude, ChatGPT, Gemini) follow **identical structure**.
 ```python
 class [AI-Name]AI(BaseAI):
     """Transport-agnostic [AI-Name] adapter."""
-    
+
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self._transport: Optional["ITransport"] = None
-    
+
     def attach_transport(self, transport: "ITransport") -> None:
         """Attach transport at startup."""
         self._transport = transport
-        logger.info("[AI]AI: transport attached -> %s", 
+        logger.info("[AI]AI: transport attached -> %s",
                     getattr(transport, "name", "unknown"))
-    
+
     async def send_prompt(self, message, wait_for_response, timeout_s, **kwargs):
         """Delegate to transport; preserve session accounting."""
-        
+
         # 1. Verify transport attached
         if not self._transport:
             return False, None, None, {
@@ -325,32 +325,32 @@ class [AI-Name]AI(BaseAI):
                     "suggested_action": "Attach a transport at startup.",
                 }
             }
-        
+
         # 2. Delegate to transport
         success, snippet, markdown, meta = await self._transport.send_prompt(
             message, wait_for_response=wait_for_response, timeout_s=timeout_s
         )
-        
+
         # 3. Add session accounting if successful
         if success and (markdown or snippet):
             response_text = markdown or snippet or ""
             session_meta = self._update_session_from_interaction(message, response_text)
             for k, v in session_meta.items():
                 meta.setdefault(k, v)
-        
+
         # 4. Ensure timeout_s present
         meta.setdefault("timeout_s", timeout_s)
-        
+
         return success, snippet, markdown, meta
-    
+
     # ... other methods follow same pattern: check transport, delegate, return
-    
+
     def get_ai_status(self) -> Dict[str, Any]:
         """Extend BaseAI status with transport info."""
         base = super().get_ai_status()
         base["transport"] = self.get_transport_status()
         return base
-    
+
     @classmethod
     def get_default_config(cls) -> Dict[str, Any]:
         """AI-specific defaults."""
@@ -421,15 +421,15 @@ AIFactory.register("gemini", GeminiAI)
 ```python
 class AIFactory:
     """Factory for creating AI instances."""
-    
+
     _registry: dict[str, type[BaseAI]] = {}
-    
+
     @classmethod
     def register(cls, ai_name: str, ai_class: type[BaseAI]) -> None:
         """Register an AI implementation."""
         normalized_name = ai_name.lower().strip()
         cls._registry[normalized_name] = ai_class
-    
+
     @classmethod
     def get_class(cls, ai_name: str) -> type[BaseAI]:
         """Get the AI class without instantiating."""
@@ -437,18 +437,18 @@ class AIFactory:
         if normalized not in cls._registry:
             raise ValueError(f"Unknown AI: {ai_name}")
         return cls._registry[normalized]
-    
+
     @classmethod
     def create(cls, ai_name: str, config: dict[str, Any]) -> BaseAI:
         """Create an AI instance."""
         ai_class = cls.get_class(ai_name)
         return ai_class(config)
-    
+
     @classmethod
     def list_available(cls) -> list[str]:
         """List all registered AIs."""
         return sorted(cls._registry.keys())
-    
+
     @classmethod
     def import_all_ais(cls) -> None:
         """Import all AI modules to trigger registration."""
@@ -605,7 +605,7 @@ From `src/daemon/transport/base.py`:
 ```python
 class ITransport(ABC):
     """Abstract transport interface."""
-    
+
     @abstractmethod
     async def send_prompt(
         self,
@@ -616,13 +616,13 @@ class ITransport(ABC):
     ) -> SendResult:
         """
         Send prompt and return result.
-        
+
         Returns:
             Tuple[bool, Optional[str], Optional[str], Dict[str, Any]]
             (success, snippet, markdown, metadata)
         """
         pass
-    
+
     @abstractmethod
     def get_status(self) -> dict[str, Any]:
         """Get transport status."""
@@ -824,16 +824,16 @@ logger = logging.getLogger(__name__)
 
 class PerplexityAI(BaseAI):
     """Transport-agnostic Perplexity adapter."""
-    
+
     def __init__(self, config: Dict[str, Any]):
         super().__init__(config)
         self._transport: Optional["ITransport"] = None
-    
+
     def attach_transport(self, transport: "ITransport") -> None:
         self._transport = transport
-        logger.info("PerplexityAI: transport attached -> %s", 
+        logger.info("PerplexityAI: transport attached -> %s",
                     getattr(transport, "name", "unknown"))
-    
+
     async def send_prompt(self, message, wait_for_response, timeout_s, **kwargs):
         if not self._transport:
             return False, None, None, {
@@ -844,22 +844,22 @@ class PerplexityAI(BaseAI):
                     "suggested_action": "Attach a transport at startup.",
                 }
             }
-        
+
         success, snippet, markdown, meta = await self._transport.send_prompt(
             message, wait_for_response=wait_for_response, timeout_s=timeout_s
         )
-        
+
         if success and (markdown or snippet):
             response_text = markdown or snippet or ""
             session_meta = self._update_session_from_interaction(message, response_text)
             for k, v in session_meta.items():
                 meta.setdefault(k, v)
-        
+
         meta.setdefault("timeout_s", timeout_s)
         return success, snippet, markdown, meta
-    
+
     # ... implement other abstract methods ...
-    
+
     def get_transport_status(self) -> Dict[str, Any]:
         t = self._transport
         status = {
@@ -870,12 +870,12 @@ class PerplexityAI(BaseAI):
         if t and hasattr(t, "get_status"):
             status["status"] = t.get_status()
         return status
-    
+
     def get_ai_status(self) -> Dict[str, Any]:
         base = super().get_ai_status()
         base["transport"] = self.get_transport_status()
         return base
-    
+
     @classmethod
     def get_default_config(cls) -> Dict[str, Any]:
         return {
@@ -1062,14 +1062,14 @@ src/daemon/ai/
 
 ### Architecture Benefits
 
-✅ **Separation of Concerns**: AI logic separate from transport mechanics  
-✅ **Testability**: Mock transports for unit tests  
-✅ **Maintainability**: Site changes isolated to transport layer  
-✅ **Extensibility**: Add new AIs without modifying existing code  
-✅ **Type Safety**: Clear interfaces and contracts  
+✅ **Separation of Concerns**: AI logic separate from transport mechanics
+✅ **Testability**: Mock transports for unit tests
+✅ **Maintainability**: Site changes isolated to transport layer
+✅ **Extensibility**: Add new AIs without modifying existing code
+✅ **Type Safety**: Clear interfaces and contracts
 
 ---
 
-**Document Version:** 1.0  
-**Last Reviewed:** October 27, 2025  
+**Document Version:** 1.0
+**Last Reviewed:** October 27, 2025
 **Maintainer:** AI-App Development Team

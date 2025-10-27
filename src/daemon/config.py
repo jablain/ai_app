@@ -145,6 +145,7 @@ class AppConfig:
     # Per-AI transport selection, e.g. {"claude": "web", "chatgpt": "api"}
     ai_transports: dict[str, str] = field(default_factory=dict)
 
+
 # ---------------------------------------------------------------------------
 # Validation Helpers
 # ---------------------------------------------------------------------------
@@ -397,7 +398,6 @@ def load_config() -> AppConfig:
                 elif hasattr(config.features, key):
                     setattr(config.features, key, value)
 
-
         # AI section (per-AI transport selection)
         # Expected TOML:
         # [ai.claude]
@@ -411,7 +411,8 @@ def load_config() -> AppConfig:
                 if raw not in {"web", "api"}:
                     _logger.warning(
                         "Unknown transport '%s' for ai.%s; defaulting to 'web'",
-                        raw, ai_name
+                        raw,
+                        ai_name,
                     )
                 config.ai_transports[ai_name.lower().strip()] = transport
     except SystemExit:

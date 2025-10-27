@@ -3,9 +3,9 @@
   "manifest_version" : 3,
   "minimum_chrome_version" : "88",
   "name" : "Origin Trials Updates",
-  "origin-trials" : 
+  "origin-trials" :
   {
-    "disabled-features" : 
+    "disabled-features" :
     [
       "CanvasTextNg",
       "WebAssemblyCustomDescriptors"

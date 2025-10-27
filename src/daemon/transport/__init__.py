@@ -5,7 +5,7 @@ Transport layer package.
 Exports:
 - ITransport          (interface)
 - WebTransport        (generic web/CDP transport)
-- ClaudeWebTransport  (Claude-tuned web transport)	
+- ClaudeWebTransport  (Claude-tuned web transport)
 - ChatGPTWebTransport (ChatGPT-tuned web transport)
 - GeminiWebTransport  (Gemini-tuned web transport)
 """
@@ -28,4 +28,3 @@ __all__ = [
     "ChatGPTWebTransport",
     "GeminiWebTransport",
 ]
-

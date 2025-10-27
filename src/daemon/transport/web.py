@@ -8,7 +8,7 @@ import asyncio
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional, Tuple
+from typing import Any
 
 from playwright.async_api import Page, TimeoutError as PWTimeout
 
@@ -51,11 +51,11 @@ class WebTransport(ITransport):
         self._logger = logger
 
         # Cached CDP info
-        self._cdp_url: Optional[str] = None
+        self._cdp_url: str | None = None
         self._cdp_origin: str = "none"
 
         # Last used page (not strictly required, but handy for start_new_session)
-        self._page: Optional[Page] = None
+        self._page: Page | None = None
 
     # ---------- ITransport identity ----------
     @property
@@ -85,7 +85,7 @@ class WebTransport(ITransport):
         """
         request_id = str(uuid.uuid4())
         start_ts = time.time()
-        stage_log: Dict[str, Any] = {"request_id": request_id, "send_start": _iso_now()}
+        stage_log: dict[str, Any] = {"request_id": request_id, "send_start": _iso_now()}
         warnings: list[dict] = []
 
         try:
@@ -201,7 +201,7 @@ class WebTransport(ITransport):
 
             snippet = None
             markdown = None
-            elapsed_ms: Optional[int] = None
+            elapsed_ms: int | None = None
 
             if wait_for_response:
                 t0 = time.time()
@@ -238,7 +238,10 @@ class WebTransport(ITransport):
                             "error": {
                                 "code": "RESPONSE_TIMEOUT",
                                 "message": f"Prompt sent, but no response completed within {timeout_s}s.",
-                                "evidence": {"page_url": page.url, "selector": self.STOP_BUTTON},
+                                "evidence": {
+                                    "page_url": page.url,
+                                    "selector": self.STOP_BUTTON,
+                                },
                                 "stage_log": dict(stage_log),
                             },
                         },
@@ -296,7 +299,7 @@ class WebTransport(ITransport):
         except Exception:
             return False
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """Return current transport state for diagnostics."""
         return {
             "kind": self.kind.value,
@@ -306,7 +309,7 @@ class WebTransport(ITransport):
         }
 
     # ---------- Internals ----------
-    async def _get_cdp_url(self) -> Tuple[Optional[str], str]:
+    async def _get_cdp_url(self) -> tuple[str | None, str]:
         """
         Ask the shared BrowserConnectionPool for the CDP URL.
         """
@@ -324,7 +327,7 @@ class WebTransport(ITransport):
         except Exception:
             return None, "error"
 
-    async def _pick_page(self, ws_url: str) -> Optional[Page]:
+    async def _pick_page(self, ws_url: str) -> Page | None:
         """
         Reuse an existing page matching base_url, or open a new one.
         Delegates to the BrowserConnectionPool so we share the same Playwright instance.
@@ -346,7 +349,7 @@ class WebTransport(ITransport):
         except Exception:
             return False
 
-    async def _detect_page_state(self, page: Page, max_text_len: int = 300) -> Optional[dict]:
+    async def _detect_page_state(self, page: Page, max_text_len: int = 300) -> dict | None:
         """
         Lightweight check for banners/toasts/rate limits/auth walls. Non-fatal.
         """
@@ -426,7 +429,9 @@ class WebTransport(ITransport):
         except Exception:
             return True
 
-    async def _extract_response(self, page: Page, baseline_count: int) -> Tuple[Optional[str], Optional[str]]:
+    async def _extract_response(
+        self, page: Page, baseline_count: int
+    ) -> tuple[str | None, str | None]:
         """
         Extract the latest response text (markdown/plain). Subclasses can override.
         Default: pick the last RESPONSE_CONTENT (inner_text), fallback to last assistant bubble.
@@ -458,4 +463,3 @@ class WebTransport(ITransport):
             if self._logger:
                 self._logger.warning(f"_extract_response failed: {e}")
             return "", ""
-

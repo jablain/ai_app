@@ -56,4 +56,3 @@ include = ["cli_bridge*", "chat_ui*", "daemon*", "common*", "tools*"]
 [tool.pytest.ini_options]
 addopts = "-q --tb=short"
 testpaths = ["tests"]
-

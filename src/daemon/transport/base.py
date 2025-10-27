@@ -11,14 +11,15 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 
 
 class TransportKind(str, Enum):
     """Kinds of transports supported by the daemon."""
-    WEB = "web"      # Browser/CDP-based automation
-    API = "api"      # Direct HTTP API
-    MOCK = "mock"    # Test-only or local fake
+
+    WEB = "web"  # Browser/CDP-based automation
+    API = "api"  # Direct HTTP API
+    MOCK = "mock"  # Test-only or local fake
 
 
 @dataclass(frozen=True)
@@ -29,10 +30,11 @@ class SendMetadata:
     This is intentionally unopinionated; concrete transports may add fields
     (timings, request ids, model name, page url, etc.). Keep values JSON-safe.
     """
-    data: Dict[str, Any]
+
+    data: dict[str, Any]
 
 
-SendResult = Tuple[bool, Optional[str], Optional[str], Dict[str, Any]]
+SendResult = tuple[bool, Optional[str], Optional[str], dict[str, Any]]
 # (success, snippet, markdown, metadata)
 
 
@@ -93,14 +95,14 @@ class ITransport(ABC):
 
     # ---------- Optional convenience ops (not required by daemon paths) ----------
 
-    async def list_messages(self) -> list[Dict[str, Any]]:
+    async def list_messages(self) -> list[dict[str, Any]]:
         """
         Optional: return a lightweight list of recent messages for debugging.
         Default implementation communicates that it's unsupported.
         """
         raise NotImplementedError(f"{self.__class__.__name__}.list_messages is not implemented")
 
-    async def extract_message(self, baseline_count: int = 0) -> Dict[str, Any]:
+    async def extract_message(self, baseline_count: int = 0) -> dict[str, Any]:
         """
         Optional: extract the most recent message since a baseline.
         """
@@ -109,7 +111,7 @@ class ITransport(ABC):
     # ---------- Status / diagnostics ----------
 
     @abstractmethod
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """
         Return transport-level status for /status.
 
@@ -120,4 +122,3 @@ class ITransport(ABC):
         - model name if known
         """
         raise NotImplementedError
-

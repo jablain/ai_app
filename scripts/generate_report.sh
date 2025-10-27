@@ -16,4 +16,3 @@ REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 
 cd "${REPO_ROOT}"
 exec "${PYTHON_BIN}" -m tools.generate_report "$@"
-

@@ -285,7 +285,6 @@ class BrowserConnectionPool:
         assert self._browser is not None
         return self._browser
 
-
     # --- shim for new transports ---
     async def get_connection(self, _ws_url: str | None = None) -> Browser:
         """

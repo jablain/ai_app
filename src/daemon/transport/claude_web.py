@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Optional, Tuple
 
 try:
     import markdownify  # optional
@@ -95,7 +94,7 @@ class ClaudeWebTransport(WebTransport):
             # Be permissive; extraction step will verify content
             return True
 
-    async def _extract_response(self, page: Page, baseline_count: int) -> Tuple[str, str]:
+    async def _extract_response(self, page: Page, baseline_count: int) -> tuple[str, str]:
         """
         Extract last markdown block from Claude's UI.
         Steps:
@@ -149,4 +148,3 @@ class ClaudeWebTransport(WebTransport):
 
         snippet = text[: self.SNIPPET_LENGTH] if text else ""
         return snippet, text
-

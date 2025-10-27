@@ -16,8 +16,7 @@ from daemon.health import HealthMonitor
 from daemon.ai.factory import AIFactory
 from daemon.config import load_config
 from daemon.transport import ClaudeWebTransport
-from daemon.transport import ChatGPTWebTransport
-from daemon.transport import GeminiWebTransport
+
 # Configure logging
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -161,11 +160,12 @@ async def lifespan(app: FastAPI):
                 except Exception as te:
                     logger.warning(f"Transport attach failed for claude: {te}")
 
-           # ChatGPT → ChatGPTWebTransport
+            # ChatGPT → ChatGPTWebTransport
             chatgpt_mode = (transports_cfg.get("chatgpt", "web") or "web").lower().strip()
             if "chatgpt" in ai_instances and chatgpt_mode == "web":
                 try:
                     from daemon.transport import ChatGPTWebTransport
+
                     chatgpt_transport = ChatGPTWebTransport(
                         base_url="https://chatgpt.com",
                         browser_pool=browser_pool,
@@ -181,6 +181,7 @@ async def lifespan(app: FastAPI):
             if "gemini" in ai_instances and gemini_mode == "web":
                 try:
                     from daemon.transport import GeminiWebTransport
+
                     gemini_transport = GeminiWebTransport(
                         base_url="https://gemini.google.com",
                         browser_pool=browser_pool,
@@ -313,7 +314,10 @@ async def send(request: SendRequest):
                     "message": f"Unknown AI target: {request.target}",
                     "severity": "error",
                     "suggested_action": f"Use one of: {', '.join(ai_instances.keys())}",
-                    "evidence": {"requested": request.target, "available": list(ai_instances.keys())},
+                    "evidence": {
+                        "requested": request.target,
+                        "available": list(ai_instances.keys()),
+                    },
                 },
                 "warnings": [],
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
@@ -354,7 +358,10 @@ async def send(request: SendRequest):
                     "message": f"Internal error: {str(e)}",
                     "severity": "error",
                     "suggested_action": "Check daemon logs and retry.",
-                    "evidence": {"exception": str(e), "exception_type": type(e).__name__},
+                    "evidence": {
+                        "exception": str(e),
+                        "exception_type": type(e).__name__,
+                    },
                 },
                 "warnings": [],
                 "timeout_s": request.timeout_s,
@@ -376,4 +383,3 @@ if __name__ == "__main__":
         port = getattr(cfg.daemon, "port", port)
 
     uvicorn.run(app, host=host, port=port, log_level="info")
-

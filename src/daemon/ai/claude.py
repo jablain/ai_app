@@ -1,7 +1,7 @@
 # FILE: src/daemon/ai/claude.py
 
 import logging
-from typing import Any, Dict, Optional, Tuple
+from typing import Any, Optional
 
 from .base import BaseAI
 from .factory import AIFactory
@@ -24,7 +24,7 @@ class ClaudeAI(BaseAI):
     - Keeps BaseAI session accounting and public API stable.
     """
 
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: dict[str, Any]):
         super().__init__(config)
         self._transport: Optional["ITransport"] = None
 
@@ -41,7 +41,7 @@ class ClaudeAI(BaseAI):
         wait_for_response: bool = True,
         timeout_s: float = 60.0,
         **kwargs,
-    ) -> Tuple[bool, Optional[str], Optional[str], Dict[str, Any]]:
+    ) -> tuple[bool, str | None, str | None, dict[str, Any]]:
         """
         Delegate to transport; preserve BaseAI token/session accounting.
         """
@@ -110,12 +110,12 @@ class ClaudeAI(BaseAI):
         # Not fatal if transport doesn't support it
         return True
 
-    def get_transport_status(self) -> Dict[str, Any]:
+    def get_transport_status(self) -> dict[str, Any]:
         """
         Return transport-layer status (for /status endpoint wiring).
         """
         t = self._transport
-        status: Dict[str, Any] = {
+        status: dict[str, Any] = {
             "attached": bool(t),
             "name": getattr(t, "name", None),
             "kind": getattr(getattr(t, "kind", None), "value", None),
@@ -127,7 +127,7 @@ class ClaudeAI(BaseAI):
                 status["status"] = {"error": f"transport_status_unavailable: {e}"}
         return status
 
-    def get_ai_status(self) -> Dict[str, Any]:
+    def get_ai_status(self) -> dict[str, Any]:
         """
         Extend BaseAI session status with transport info.
         """
@@ -138,7 +138,7 @@ class ClaudeAI(BaseAI):
     # ---------- Static config ----------
 
     @classmethod
-    def get_default_config(cls) -> Dict[str, Any]:
+    def get_default_config(cls) -> dict[str, Any]:
         """
         Keep the same defaults that worked previously for Claude.
         """
@@ -154,4 +154,3 @@ class ClaudeAI(BaseAI):
 
 # Register this adapter with the factory under the same key ('claude')
 AIFactory.register("claude", ClaudeAI)
-

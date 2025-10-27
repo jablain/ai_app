@@ -3,7 +3,6 @@ from __future__ import annotations
 
 import asyncio
 import time
-from typing import Optional, Tuple
 
 from playwright.async_api import Page
 
@@ -54,11 +53,11 @@ class GeminiWebTransport(WebTransport):
             # Click to focus
             await box.click(timeout=2000)
             await asyncio.sleep(0.1)
-            
+
             # Set text in contenteditable div (Gemini uses Quill editor)
             await box.evaluate(f"el => el.innerText = {repr(message)}")
             await asyncio.sleep(0.2)
-            
+
             # Try to click send button
             try:
                 send_btn = page.locator(self.SEND_BUTTON).first
@@ -97,7 +96,7 @@ class GeminiWebTransport(WebTransport):
             # Be permissive; extraction step will verify content
             return True
 
-    async def _extract_response(self, page: Page, baseline_count: int) -> Tuple[str, str]:
+    async def _extract_response(self, page: Page, baseline_count: int) -> tuple[str, str]:
         """
         Extract last response from Gemini's UI.
         Steps:
@@ -124,13 +123,13 @@ class GeminiWebTransport(WebTransport):
         # Get all response containers
         containers = page.locator(self.RESPONSE_CONTAINER)
         container_count = await containers.count()
-        
+
         if container_count == 0:
             return "", ""
-        
+
         # Get the last container
         last_container = containers.nth(container_count - 1)
-        
+
         # Try to get content from markdown element
         text: str = ""
         try:
