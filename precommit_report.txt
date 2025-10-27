@@ -1,0 +1,2369 @@
+check for merge conflicts................................................Passed
+fix end of files.........................................................Failed
+- hook id: end-of-file-fixer
+- exit code: 1
+- files were modified by this hook
+
+Fixing runtime/browser/profiles/multi_ai_cdp/Variations
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/Network Persistent State
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/TransportSecurity
+Fixing runtime/browser/profiles/multi_ai_cdp/Local State
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/Preferences
+Fixing runtime/browser/profiles/multi_ai_cdp/Last Version
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/Secure Preferences
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/SCT Auditing Pending Reports
+
+trim trailing whitespace.................................................Failed
+- hook id: trailing-whitespace
+- exit code: 1
+- files were modified by this hook
+
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/shared_proto_db/metadata/LOG
+Fixing runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/Site Characteristics Database/LOG
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/shared_proto_db/LOG
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/GCM Store/Encryption/LOG
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/Extension State/LOG
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/Sync Data/LevelDB/LOG
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/Session Storage/LOG
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/Service Worker/Database/LOG
+Fixing runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set
+Fixing runtime/browser/profiles/multi_ai_cdp/Default/IndexedDB/https_chatgpt.com_0.indexeddb.leveldb/LOG
+
+check yaml...............................................................Passed
+check toml...............................................................Passed
+check json...............................................................Failed
+- hook id: check-json
+- exit code: 1
+
+runtime/ai_cli_bridge/profiles/main/FirstPartySetsPreloaded/2025.7.24.0/sets.json: Failed to json decode (Extra data: line 2 column 1 (char 186))
+runtime/daemon/browser/profiles/multi_ai_cdp/FirstPartySetsPreloaded/2025.7.24.0/sets.json: Failed to json decode (Extra data: line 2 column 1 (char 186))
+
+detect private key.......................................................Passed
+forbid new submodules................................(no files to check)Skipped
+mixed line ending........................................................Passed
+check for added large files..............................................Passed
+pyupgrade................................................................Passed
+ruff (legacy alias)......................................................Failed
+- hook id: ruff
+- exit code: 1
+
+F841 Local variable `response` is assigned to but never used
+   --> src/cli_bridge/commands/daemon_cmd.py:368:13
+    |
+366 |         cdp_port = config.cdp.port
+367 |         try:
+368 |             response = requests.get(f"http://127.0.0.1:{cdp_port}/json/version", timeout=1.0)
+    |             ^^^^^^^^
+369 |             typer.secho(
+370 |                 f"  Warning: CDP still responding on port {cdp_port}",
+    |
+help: Remove assignment to unused variable `response`
+
+F401 `.claude` imported but unused; consider using `importlib.util.find_spec` to test for availability
+   --> src/daemon/ai/factory.py:103:27
+    |
+101 |         # at the bottom of each AI module
+102 |         try:
+103 |             from . import claude
+    |                           ^^^^^^
+104 |         except ImportError as e:
+105 |             print(f"Warning: Could not import claude: {e}")
+    |
+help: Remove unused import: `.claude`
+
+F401 `.gemini` imported but unused; consider using `importlib.util.find_spec` to test for availability
+   --> src/daemon/ai/factory.py:108:27
+    |
+107 |         try:
+108 |             from . import gemini
+    |                           ^^^^^^
+109 |         except ImportError as e:
+110 |             print(f"Warning: Could not import gemini: {e}")
+    |
+help: Remove unused import: `.gemini`
+
+F401 `.chatgpt` imported but unused; consider using `importlib.util.find_spec` to test for availability
+   --> src/daemon/ai/factory.py:113:27
+    |
+112 |         try:
+113 |             from . import chatgpt
+    |                           ^^^^^^^
+114 |         except ImportError as e:
+115 |             print(f"Warning: Could not import chatgpt: {e}")
+    |
+help: Remove unused import: `.chatgpt`
+
+Found 4 errors.
+No fixes available (1 hidden fix can be enabled with the `--unsafe-fixes` option).
+
+ruff format..............................................................Failed
+- hook id: ruff-format
+- files were modified by this hook
+
+24 files reformatted, 16 files left unchanged
+
+black....................................................................Failed
+- hook id: black
+- files were modified by this hook
+
+reformatted src/cli_bridge/cli.py
+reformatted src/cli_bridge/commands/send_cmd.py
+reformatted src/chat_ui/stats_helper.py
+reformatted src/chat_ui/response_display.py
+reformatted src/chat_ui/stats_display.py
+reformatted src/daemon/ai/chatgpt.py
+reformatted src/daemon/ai/gemini.py
+reformatted src/daemon/ai/claude.py
+reformatted src/daemon/transport/base.py
+reformatted src/daemon/health.py
+reformatted src/cli_bridge/commands/status_cmd.py
+reformatted src/chat_ui/startup_manager.py
+reformatted src/daemon/ai/base.py
+reformatted src/daemon/transport/claude_web.py
+reformatted src/daemon/transport/gemini_web.py
+reformatted src/daemon/transport/chatgpt_web.py
+reformatted src/chat_ui/daemon_client.py
+reformatted src/daemon/browser/connection_pool.py
+reformatted src/chat_ui/window.py
+reformatted src/daemon/main.py
+reformatted src/daemon/config.py
+reformatted src/cli_bridge/commands/daemon_cmd.py
+reformatted src/daemon/transport/web.py
+reformatted src/tools/generate_report.py
+
+All done! ✨ 🍰 ✨
+24 files reformatted, 16 files left unchanged.
+
+mypy.....................................................................Failed
+- hook id: mypy
+- exit code: 1
+
+src/chat_ui/stats_display.py:13: error: Class cannot subclass "Box" (has type "Any")  [misc]
+src/chat_ui/stats_display.py:16: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/stats_display.py:16: note: Use "-> None" if function does not return a value
+src/chat_ui/stats_display.py:34: error: Call to untyped function "_create_labels" in typed context  [no-untyped-call]
+src/chat_ui/stats_display.py:37: error: Call to untyped function "clear" in typed context  [no-untyped-call]
+src/chat_ui/stats_display.py:39: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/stats_display.py:39: note: Use "-> None" if function does not return a value
+src/chat_ui/stats_display.py:83: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/stats_display.py:105: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/stats_display.py:145: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/stats_display.py:145: note: Use "-> None" if function does not return a value
+src/chat_ui/markdown_parser.py:12: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/markdown_parser.py:15: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/markdown_parser.py:25: error: Call to untyped function "_handle_code_block" in typed context  [no-untyped-call]
+src/chat_ui/markdown_parser.py:30: error: Call to untyped function "_handle_header" in typed context  [no-untyped-call]
+src/chat_ui/markdown_parser.py:36: error: Call to untyped function "_handle_list_item" in typed context  [no-untyped-call]
+src/chat_ui/markdown_parser.py:41: error: Call to untyped function "_handle_inline_formatting" in typed context  [no-untyped-call]
+src/chat_ui/markdown_parser.py:44: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/markdown_parser.py:63: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/markdown_parser.py:67: error: Call to untyped function "_insert_text" in typed context  [no-untyped-call]
+src/chat_ui/markdown_parser.py:77: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/markdown_parser.py:85: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/markdown_parser.py:88: error: Call to untyped function "_insert_text" in typed context  [no-untyped-call]
+src/chat_ui/markdown_parser.py:101: error: Call to untyped function "_insert_tagged_text" in typed context  [no-untyped-call]
+src/chat_ui/markdown_parser.py:108: error: Call to untyped function "_insert_tagged_text" in typed context  [no-untyped-call]
+src/chat_ui/markdown_parser.py:115: error: Call to untyped function "_insert_tagged_text" in typed context  [no-untyped-call]
+src/chat_ui/markdown_parser.py:120: error: Call to untyped function "_insert_text" in typed context  [no-untyped-call]
+src/chat_ui/markdown_parser.py:124: error: Call to untyped function "_insert_text" in typed context  [no-untyped-call]
+src/chat_ui/markdown_parser.py:126: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/markdown_parser.py:131: error: Function is missing a type annotation  [no-untyped-def]
+src/daemon/main.py:42: error: Class cannot subclass "BaseModel" (has type "Any")  [misc]
+src/daemon/main.py:51: error: Class cannot subclass "BaseModel" (has type "Any")  [misc]
+src/daemon/main.py:60: error: Class cannot subclass "BaseModel" (has type "Any")  [misc]
+src/daemon/main.py:67: error: Class cannot subclass "BaseModel" (has type "Any")  [misc]
+src/daemon/main.py:79: error: Function is missing a return type annotation  [no-untyped-def]
+src/daemon/main.py:158: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/main.py:174: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/main.py:190: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/main.py:253: error: Function is missing a return type annotation  [no-untyped-def]
+src/daemon/main.py:264: error: Function is missing a return type annotation  [no-untyped-def]
+src/daemon/main.py:299: error: Untyped decorator makes function "send" untyped  [misc]
+src/daemon/main.py:300: error: Function is missing a return type annotation  [no-untyped-def]
+src/daemon/ai/base.py:32: error: Missing type parameters for generic type "dict"  [type-arg]
+src/daemon/ai/base.py:247: error: Missing return statement  [return]
+src/daemon/ai/base.py:247: error: Missing type parameters for generic type "dict"  [type-arg]
+src/daemon/ai/base.py:304: error: Unsupported type "dict[str, Any]" for ** expansion in TypedDict  [typeddict-item]
+src/daemon/ai/base.py:309: error: Returning Any from function declared to return "str"  [no-any-return]
+src/chat_ui/window.py:20: error: Class cannot subclass "ApplicationWindow" (has type "Any")  [misc]
+src/chat_ui/window.py:23: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
+src/chat_ui/window.py:34: error: Call to untyped function "_build_ui" in typed context  [no-untyped-call]
+src/chat_ui/window.py:37: error: Call to untyped function "_load_available_ais" in typed context  [no-untyped-call]
+src/chat_ui/window.py:43: error: Call to untyped function "_start_periodic_refresh" in typed context  [no-untyped-call]
+src/chat_ui/window.py:45: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:45: note: Use "-> None" if function does not return a value
+src/chat_ui/window.py:119: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:119: note: Use "-> None" if function does not return a value
+src/chat_ui/window.py:148: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/window.py:167: error: Missing type parameters for generic type "dict"  [type-arg]
+src/chat_ui/window.py:198: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:198: note: Use "-> None" if function does not return a value
+src/chat_ui/window.py:227: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:227: error: Missing type parameters for generic type "dict"  [type-arg]
+src/chat_ui/window.py:270: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:270: error: Missing type parameters for generic type "dict"  [type-arg]
+src/chat_ui/window.py:278: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:285: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:288: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:297: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:297: note: Use "-> None" if function does not return a value
+src/chat_ui/window.py:309: error: Returning Any from function declared to return "str"  [no-any-return]
+src/chat_ui/window.py:311: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:311: note: Use "-> None" if function does not return a value
+src/chat_ui/window.py:316: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/window.py:332: error: Call to untyped function "_clear_input" in typed context  [no-untyped-call]
+src/chat_ui/window.py:342: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:356: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:392: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:401: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/window.py:404: error: Call to untyped function "_stop_periodic_refresh" in typed context  [no-untyped-call]
+src/chat_ui/startup_manager.py:17: error: Class cannot subclass "Window" (has type "Any")  [misc]
+src/chat_ui/startup_manager.py:54: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/startup_manager.py:62: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/startup_manager.py:88: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/startup_manager.py:88: note: Use "-> None" if function does not return a value
+src/chat_ui/startup_manager.py:171: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/startup_manager.py:180: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/startup_manager.py:203: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/response_display.py:16: error: Class cannot subclass "Box" (has type "Any")  [misc]
+src/chat_ui/response_display.py:19: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/response_display.py:19: note: Use "-> None" if function does not return a value
+src/chat_ui/response_display.py:65: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/response_display.py:84: error: Call to untyped function "_scroll_to_bottom" in typed context  [no-untyped-call]
+src/chat_ui/response_display.py:86: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/response_display.py:96: error: Call to untyped function "_scroll_to_bottom" in typed context  [no-untyped-call]
+src/chat_ui/response_display.py:98: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/response_display.py:98: note: Use "-> None" if function does not return a value
+src/chat_ui/response_display.py:103: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/response_display.py:120: error: Call to untyped function "_show_copy_feedback" in typed context  [no-untyped-call]
+src/chat_ui/response_display.py:127: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/response_display.py:137: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/main.py:26: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/main.py:26: note: Use "-> None" if function does not return a value
+src/chat_ui/main.py:46: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/main.py:52: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/main.py:71: error: Call to untyped function "main" in typed context  [no-untyped-call]
+src/daemon/config.py:157: error: Function "builtins.any" is not valid as a type  [valid-type]
+src/daemon/config.py:157: note: Perhaps you meant "typing.Any" instead of "any"?
+src/daemon/config.py:178: error: Function "builtins.any" is not valid as a type  [valid-type]
+src/daemon/config.py:178: note: Perhaps you meant "typing.Any" instead of "any"?
+src/daemon/ai/gemini.py:11: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/gemini.py:13: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/gemini.py:38: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
+src/daemon/ai/gemini.py:85: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/gemini.py:85: error: Returning Any from function declared to return "list[dict[str, Any]]"  [no-any-return]
+src/daemon/ai/gemini.py:85: note: Error code "no-any-return" not covered by "type: ignore" comment
+src/daemon/ai/gemini.py:90: error: Missing type parameters for generic type "dict"  [type-arg]
+src/daemon/ai/gemini.py:96: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/gemini.py:96: error: Returning Any from function declared to return "dict[Any, Any]"  [no-any-return]
+src/daemon/ai/gemini.py:96: note: Error code "no-any-return" not covered by "type: ignore" comment
+src/daemon/ai/gemini.py:107: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/gemini.py:107: error: Returning Any from function declared to return "bool"  [no-any-return]
+src/daemon/ai/gemini.py:107: note: Error code "no-any-return" not covered by "type: ignore" comment
+src/daemon/ai/gemini.py:125: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/gemini.py:130: error: Return type "dict[str, Any]" of "get_ai_status" incompatible with return type "AIStatus" in supertype "src.daemon.ai.base.BaseAI"  [override]
+src/daemon/ai/gemini.py:135: error: TypedDict "AIStatus" has no key "transport"  [typeddict-unknown-key]
+src/daemon/ai/gemini.py:136: error: Incompatible return value type (got "AIStatus", expected "dict[str, Any]")  [return-value]
+src/daemon/ai/claude.py:11: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/claude.py:13: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/claude.py:38: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
+src/daemon/ai/claude.py:85: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/claude.py:85: error: Returning Any from function declared to return "list[dict[str, Any]]"  [no-any-return]
+src/daemon/ai/claude.py:85: note: Error code "no-any-return" not covered by "type: ignore" comment
+src/daemon/ai/claude.py:90: error: Missing type parameters for generic type "dict"  [type-arg]
+src/daemon/ai/claude.py:96: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/claude.py:96: error: Returning Any from function declared to return "dict[Any, Any]"  [no-any-return]
+src/daemon/ai/claude.py:96: note: Error code "no-any-return" not covered by "type: ignore" comment
+src/daemon/ai/claude.py:107: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/claude.py:107: error: Returning Any from function declared to return "bool"  [no-any-return]
+src/daemon/ai/claude.py:107: note: Error code "no-any-return" not covered by "type: ignore" comment
+src/daemon/ai/claude.py:125: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/claude.py:130: error: Return type "dict[str, Any]" of "get_ai_status" incompatible with return type "AIStatus" in supertype "src.daemon.ai.base.BaseAI"  [override]
+src/daemon/ai/claude.py:135: error: TypedDict "AIStatus" has no key "transport"  [typeddict-unknown-key]
+src/daemon/ai/claude.py:136: error: Incompatible return value type (got "AIStatus", expected "dict[str, Any]")  [return-value]
+src/daemon/ai/chatgpt.py:11: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/chatgpt.py:13: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/chatgpt.py:38: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
+src/daemon/ai/chatgpt.py:85: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/chatgpt.py:85: error: Returning Any from function declared to return "list[dict[str, Any]]"  [no-any-return]
+src/daemon/ai/chatgpt.py:85: note: Error code "no-any-return" not covered by "type: ignore" comment
+src/daemon/ai/chatgpt.py:90: error: Missing type parameters for generic type "dict"  [type-arg]
+src/daemon/ai/chatgpt.py:96: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/chatgpt.py:96: error: Returning Any from function declared to return "dict[Any, Any]"  [no-any-return]
+src/daemon/ai/chatgpt.py:96: note: Error code "no-any-return" not covered by "type: ignore" comment
+src/daemon/ai/chatgpt.py:107: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/chatgpt.py:107: error: Returning Any from function declared to return "bool"  [no-any-return]
+src/daemon/ai/chatgpt.py:107: note: Error code "no-any-return" not covered by "type: ignore" comment
+src/daemon/ai/chatgpt.py:125: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/ai/chatgpt.py:130: error: Return type "dict[str, Any]" of "get_ai_status" incompatible with return type "AIStatus" in supertype "src.daemon.ai.base.BaseAI"  [override]
+src/daemon/ai/chatgpt.py:135: error: TypedDict "AIStatus" has no key "transport"  [typeddict-unknown-key]
+src/daemon/ai/chatgpt.py:136: error: Incompatible return value type (got "AIStatus", expected "dict[str, Any]")  [return-value]
+src/cli_bridge/commands/status_cmd.py:112: error: Incompatible types in assignment (expression has type "None", variable has type "str")  [assignment]
+src/cli_bridge/commands/daemon_cmd.py:174: error: Untyped decorator makes function "start_daemon" untyped  [misc]
+src/cli_bridge/commands/daemon_cmd.py:175: error: Function is missing a return type annotation  [no-untyped-def]
+src/cli_bridge/commands/daemon_cmd.py:297: error: Untyped decorator makes function "stop_daemon" untyped  [misc]
+src/cli_bridge/commands/daemon_cmd.py:298: error: Function is missing a return type annotation  [no-untyped-def]
+src/cli_bridge/commands/daemon_cmd.py:409: error: Untyped decorator makes function "daemon_status" untyped  [misc]
+src/cli_bridge/commands/daemon_cmd.py:410: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/daemon_client.py:109: error: Returning Any from function declared to return "dict[str, Any] | None"  [no-any-return]
+src/chat_ui/daemon_client.py:300: error: Function is missing a return type annotation  [no-untyped-def]
+src/chat_ui/daemon_client.py:300: note: Use "-> None" if function does not return a value
+src/chat_ui/daemon_client.py:309: error: Function is missing a type annotation  [no-untyped-def]
+src/chat_ui/daemon_client.py:311: error: Call to untyped function "close" in typed context  [no-untyped-call]
+src/cli_bridge/cli.py:44: error: Untyped decorator makes function "send" untyped  [misc]
+src/cli_bridge/cli.py:45: error: Function is missing a return type annotation  [no-untyped-def]
+src/cli_bridge/cli.py:89: error: Untyped decorator makes function "status" untyped  [misc]
+src/cli_bridge/cli.py:90: error: Function is missing a return type annotation  [no-untyped-def]
+src/cli_bridge/cli.py:116: error: Function is missing a return type annotation  [no-untyped-def]
+src/cli_bridge/cli.py:116: note: Use "-> None" if function does not return a value
+src/cli_bridge/cli.py:126: error: Function is missing a return type annotation  [no-untyped-def]
+src/cli_bridge/cli.py:126: note: Use "-> None" if function does not return a value
+src/cli_bridge/cli.py:132: error: Call to untyped function "main" in typed context  [no-untyped-call]
+src/daemon/transport/web.py:42: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
+src/daemon/transport/web.py:89: error: Missing type parameters for generic type "dict"  [type-arg]
+src/daemon/transport/web.py:352: error: Missing type parameters for generic type "dict"  [type-arg]
+src/daemon/transport/web.py:389: error: Returning Any from function declared to return "int"  [no-any-return]
+src/daemon/health.py:18: error: Function is missing a type annotation for one or more arguments  [no-untyped-def]
+src/daemon/health.py:31: error: Missing type parameters for generic type "Task"  [type-arg]
+src/daemon/health.py:34: error: Function is missing a return type annotation  [no-untyped-def]
+src/daemon/health.py:34: note: Use "-> None" if function does not return a value
+src/daemon/health.py:41: error: Call to untyped function "_monitor_loop" in typed context  [no-untyped-call]
+src/daemon/health.py:44: error: Function is missing a return type annotation  [no-untyped-def]
+src/daemon/health.py:44: note: Use "-> None" if function does not return a value
+src/daemon/health.py:65: error: Missing type parameters for generic type "dict"  [type-arg]
+src/daemon/health.py:79: error: Function is missing a return type annotation  [no-untyped-def]
+src/daemon/health.py:79: note: Use "-> None" if function does not return a value
+src/daemon/health.py:85: error: Call to untyped function "_perform_health_check" in typed context  [no-untyped-call]
+src/daemon/health.py:97: error: Function is missing a return type annotation  [no-untyped-def]
+src/daemon/health.py:97: note: Use "-> None" if function does not return a value
+src/daemon/browser/connection_pool.py:75: error: Missing type parameters for generic type "Popen"  [type-arg]
+src/daemon/browser/connection_pool.py:272: error: Returning Any from function declared to return "str | None"  [no-any-return]
+src/daemon/transport/gemini_web.py:38: error: Returning Any from function declared to return "int"  [no-any-return]
+src/daemon/transport/claude_web.py:10: error: Unused "type: ignore" comment  [unused-ignore]
+src/daemon/transport/claude_web.py:46: error: Returning Any from function declared to return "int"  [no-any-return]
+src/daemon/transport/chatgpt_web.py:38: error: Returning Any from function declared to return "int"  [no-any-return]
+Found 174 errors in 22 files (checked 40 source files)
+
+codespell................................................................Failed
+- hook id: codespell
+- exit code: 65
+
+WARNING: Cannot decode file using encoding "utf-8": runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set
+WARNING: Trying next encoding "iso-8859-1"
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:3088: serie ==> series
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:3693: empress ==> impress
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:4793: rouge ==> rogue
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:5431: bloc ==> block
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:5640: chancel ==> cancel
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:5783: mater ==> matter, master, mother
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:6501: parma ==> param
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:7276: provence ==> province
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:7861: handel ==> handle
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:8310: trough ==> through
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:8366: somme ==> some
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:8524: pleas ==> please
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:8581: revered ==> reversed
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:9140: parana ==> piranha
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:9638: humber ==> number
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:10334: attache ==> attaché, attached, attach
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:11571: accademia ==> academia
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:12265: theses ==> these, thesis
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:13166: despatches ==> dispatches
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:13284: woking ==> working, waking
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:13348: groupe ==> grouped, group
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:13482: guerilla ==> guerrilla
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:13598: worthing ==> worth, meriting
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:14032: weill ==> will
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:14421: unser ==> under, unset, unsure, user
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:15252: normale ==> normal
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:15256: herat ==> heart
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:15357: regio ==> region
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:16108: frome ==> from
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:16343: presse ==> pressed, press
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:16383: lifes ==> lives
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:16552: celle ==> cell
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:16556: hander ==> handler
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:16928: programing ==> programming
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:17013: ponting ==> pointing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:17575: archiv ==> archive
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:17742: despatched ==> dispatched
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:18375: oriente ==> oriented
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:18697: enver ==> never
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:18922: cyclin ==> cycling
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:19512: coverts ==> converts, covers, covets
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:19530: corus ==> chorus
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:20194: fulfilment ==> fulfillment
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:20353: connexion ==> connection
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:20360: chambre ==> chamber
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:20361: despatch ==> dispatch
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:20761: fille ==> file, fill, filled
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:20826: unter ==> under
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:21214: pugin ==> plugin
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:21516: academica ==> academia
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:21839: leaded ==> led, lead
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:22001: goole ==> google
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:22405: equipments ==> equipment
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:22717: profesional ==> professional
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:22899: blocs ==> blocks
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:22978: mouvement ==> movement
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:23046: bootle ==> bottle
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:23127: homogenous ==> homogeneous
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:23871: modell ==> model
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:24481: gardai ==> gardaí
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:24973: arges ==> args
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:26077: tring ==> trying, string, ring
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:26655: studi ==> study, studio
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:26788: finial ==> final
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:28075: americanus ==> americans
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:28146: commends ==> comments, commands
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:28746: chater ==> chapter
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:28829: empted ==> emptied
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/english_wikipedia.txt:28928: wapping ==> wrapping, swapping, warping
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:57: Bu ==> By, Be, But, Bug, Bun, Bud, Buy, Bum
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:136: Ot ==> To, Of, Or, Not, It
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:291: bu ==> by, be, but, bug, bun, bud, buy, bum
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:519: fOm ==> from, form
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:521: te ==> the, be, we, to
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:562: tE ==> the, be, we, to
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:651: nd ==> and, 2nd
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:660: ND ==> AND, 2ND
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:796: OT ==> TO, OF, OR, NOT, IT
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:917: onw ==> own
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:935: UE ==> USE, DUE
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:1000: nD ==> and, 2nd
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:1101: MIS ==> MISS, MIST
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:1253: Te ==> The, Be, We, To
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:1260: Te ==> The, Be, We, To
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:1266: Ue ==> Use, Due
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:1366: OT ==> TO, OF, OR, NOT, IT
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:1403: bU ==> by, be, but, bug, bun, bud, buy, bum
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:1508: tE ==> the, be, we, to
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:1536: tE ==> the, be, we, to
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:1557: oT ==> to, of, or, not, it
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:1836: tE ==> the, be, we, to
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:1861: OnW ==> own
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:1899: FO ==> OF, FOR, TO, DO, GO
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:2042: sEh ==> she
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:2138: OT ==> TO, OF, OR, NOT, IT
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:2239: FO ==> OF, FOR, TO, DO, GO
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:2318: bu ==> by, be, but, bug, bun, bud, buy, bum
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:2380: ot ==> to, of, or, not, it
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:2402: uE ==> use, due
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:2490: te ==> the, be, we, to
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:2628: FO ==> OF, FOR, TO, DO, GO
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:2756: Bu ==> By, Be, But, Bug, Bun, Bud, Buy, Bum
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:2784: BU ==> BY, BE, BUT, BUG, BUN, BUD, BUY, BUM
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:2800: oT ==> to, of, or, not, it
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:2996: WeE ==> we
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3114: tE ==> the, be, we, to
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3199: oll ==> all, ole, old, olly, oil
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3213: Bu ==> By, Be, But, Bug, Bun, Bud, Buy, Bum
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3260: BU ==> BY, BE, BUT, BUG, BUN, BUD, BUY, BUM
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3269: Te ==> The, Be, We, To
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3310: Nd ==> And, 2nd
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3310: Nd ==> And, 2nd
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3340: uE ==> use, due
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3365: ue ==> use, due
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3416: bUI ==> buoy, buy
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3599: nD ==> and, 2nd
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3638: fo ==> of, for, to, do, go
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3644: mYe ==> may, my
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3703: uE ==> use, due
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3709: fO ==> of, for, to, do, go
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3733: Vai ==> Via, Vie
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3735: BU ==> BY, BE, BUT, BUG, BUN, BUD, BUY, BUM
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3789: UE ==> USE, DUE
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3917: NcE ==> once, nice
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:3920: FO ==> OF, FOR, TO, DO, GO
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:4043: TE ==> THE, BE, WE, TO
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:4183: FO ==> OF, FOR, TO, DO, GO
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:4233: TE ==> THE, BE, WE, TO
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:4313: fO ==> of, for, to, do, go
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:4373: bU ==> by, be, but, bug, bun, bud, buy, bum
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:4485: ot ==> to, of, or, not, it
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:4530: fO ==> of, for, to, do, go
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:4535: uE ==> use, due
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:4540: uE ==> use, due
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:4647: nd ==> and, 2nd
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:4785: TE ==> THE, BE, WE, TO
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:4904: OT ==> TO, OF, OR, NOT, IT
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:5164: UE ==> USE, DUE
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:5167: bU ==> by, be, but, bug, bun, bud, buy, bum
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:5168: TE ==> THE, BE, WE, TO
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:5209: Bu ==> By, Be, But, Bug, Bun, Bud, Buy, Bum
+runtime/daemon/browser/profiles/multi_ai_cdp/CertificateRevocation/10104/crl-set:5263: UE ==> USE, DUE
+runtime/ai_cli_bridge/profiles/main/Subresource Filter/Unindexed Rules/9.61.0/LICENSE.txt:54: synching ==> syncing
+runtime/ai_cli_bridge/profiles/main/Subresource Filter/Unindexed Rules/9.61.0/LICENSE.txt:289: MERCHANTIBILITY ==> MERCHANTABILITY
+runtime/daemon/browser/profiles/multi_ai_cdp/FirstPartySetsPreloaded/2025.7.24.0/sets.json:47: repid ==> rapid
+src/daemon/main.py:160: te ==> the, be, we, to
+src/daemon/main.py:161: te ==> the, be, we, to
+src/daemon/main.py:176: te ==> the, be, we, to
+src/daemon/main.py:177: te ==> the, be, we, to
+src/daemon/main.py:192: te ==> the, be, we, to
+src/daemon/main.py:193: te ==> the, be, we, to
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:44: tigger ==> trigger
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:560: cunt ==> count, hunt
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:1005: passwor ==> password
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:1307: licker ==> liquor
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:1641: lightnin ==> lightning
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:1882: technics ==> techniques
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:1998: microsof ==> microsoft
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:2314: wrestlin ==> wrestling
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:2343: lolipop ==> lollipop
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:2359: guiness ==> guinness
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:2402: cunts ==> counts, hunts
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:2467: absolut ==> absolute
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:2801: sting ==> string
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:2943: buddah ==> buddha
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:2958: mian ==> main, moan
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:3103: armagedon ==> armageddon
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:3217: pheonix ==> phoenix
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:3565: pasword ==> password
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:3810: beng ==> being
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:3878: gameboy ==> game boy
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:4345: americ ==> america, amebic
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:4812: assasin ==> assassin
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:4836: capetown ==> cape town
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:4889: millenium ==> millennium
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:4973: ceasar ==> caesar
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:5344: masterbate ==> masturbate
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:5458: mone ==> mono, money, none
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:5541: freee ==> free
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:5728: rollin ==> rolling, roll in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:5884: discus ==> discuss
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:5921: masterbating ==> masturbating
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:5928: parlament ==> parliament
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:5987: diamon ==> diamond
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:6126: amature ==> amateur, armature, a mature
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:6130: womans ==> woman's, women
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:6259: gallaries ==> galleries
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:6350: passord ==> password
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:6440: bizzare ==> bizarre
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:6633: whoknows ==> who knows
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:6688: wizzard ==> wizard
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:6764: architec ==> architect
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:6823: methos ==> methods, method
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:7032: samue ==> same, samuel
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:7287: litle ==> little
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:7310: strat ==> start, strata
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:7650: yello ==> yellow
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:7771: succes ==> success
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:8074: pumkin ==> pumpkin
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:8187: ceaser ==> caesar
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:8202: marketin ==> marketing, market in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:8239: modles ==> models, modules
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:8635: slippy ==> slippery
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:8648: storys ==> stories, storeys
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:8772: hellow ==> hello
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:8785: racoon ==> raccoon
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:9063: januar ==> january
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:9143: patter ==> pattern
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:9286: saphire ==> sapphire
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:9325: nickle ==> nickel
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:9646: characte ==> character
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:9711: airborn ==> airborne
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:10079: oktober ==> october
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:10683: excell ==> excel
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:10768: ganster ==> gangster
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:10782: japanes ==> japanese
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:11078: ghandi ==> gandhi
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:11201: mavrick ==> maverick
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:11203: cheeta ==> cheetah
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:11295: knowledg ==> knowledge
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:11706: hopefull ==> hopeful, hopefully
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:12408: poppin ==> popping
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:12626: deamon ==> daemon
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:12731: choclate ==> chocolate
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:12867: awsome ==> awesome
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:13081: anonymou ==> anonymous
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:13161: findout ==> find out
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:13503: infinit ==> infinite
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:13758: amatuers ==> amateurs
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:13919: lazer ==> laser
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:14080: womens ==> women's, women
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:14135: sherif ==> sheriff
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:14168: independ ==> independent
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:14528: operatio ==> operation
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:14562: bannana ==> banana, bandana
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:14571: acces ==> access
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:14604: thered ==> thread, the red
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:14821: domin ==> doming, domain, domino
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:14996: cruzer ==> cruiser
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:15005: extacy ==> ecstasy
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:15034: profesor ==> professor
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:15184: extrem ==> extremum, extreme
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:15235: crasher ==> crash
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:15270: pharoh ==> pharaoh
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:15353: cigarett ==> cigarette
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:15576: ardvark ==> aardvark
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:15777: poligon ==> polygon
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:15793: technic ==> technique
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:15899: advantag ==> advantage
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:16224: construc ==> construct
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:16484: potatoe ==> potato
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:16601: skipp ==> skip, skipped
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:16711: sucess ==> success
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:16737: pyramide ==> pyramid
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:16750: programm ==> program, programme
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:16990: comander ==> commander, commandeer
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:17660: cameleon ==> chameleon
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:17706: bulle ==> bullet
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:17940: espace ==> escape
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:18104: standart ==> standard
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:18508: februar ==> february
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:18531: millenia ==> millennia
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:18557: containe ==> contain, contained, container, contains
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:18924: shoppin ==> shopping
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:18984: structur ==> structure
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:19140: stoopid ==> stupid, stooped
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:19172: monkies ==> monkeys
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:19238: aristote ==> aristotle
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:19299: widder ==> wider
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:19554: sentinal ==> sentinel
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:19667: alway ==> always
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:19821: milion ==> million
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:20196: spagetti ==> spaghetti
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:20202: napolean ==> napoleon
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:20340: securit ==> security
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:20391: searchin ==> searching
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:20537: cornel ==> colonel
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:20624: sprin ==> spring, sprint, spin, spain, sarin, sprig, sprit
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:20632: satelite ==> satellite
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:20779: associat ==> associate
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:20846: vengence ==> vengeance
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21113: thicknes ==> thickness, thickens
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21126: tatoo ==> tattoo
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21405: fotograf ==> photograph
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21471: missle ==> missile
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21483: positiv ==> positive
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21493: fortunat ==> fortunate
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21539: nightime ==> nighttime
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21562: dezember ==> december
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21635: bogos ==> bogus
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21710: villan ==> villain
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21803: inbed ==> embed
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21845: chane ==> change, chain
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21851: faktor ==> factor
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21902: godess ==> goddess
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:21994: registr ==> register
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:22024: mistic ==> mystic
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:22069: mistery ==> mystery
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:22155: comando ==> commando
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:22215: testin ==> testing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:22474: sheeps ==> sheep
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:22477: tiggers ==> triggers
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:22494: shamen ==> shaman, shamans
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:22573: messenge ==> message
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:22635: peopl ==> people
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:22849: exclusiv ==> exclusive
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:23199: differen ==> different
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:23264: importan ==> important, importance
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:23268: doller ==> dollar
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:24217: signatur ==> signature
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:24415: comand ==> command
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:24562: dameon ==> daemon, demon, damien
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:25029: connecte ==> connected
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:25190: hampster ==> hamster
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:25369: assasins ==> assassins
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:25467: medias ==> media, mediums
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:25686: eather ==> either, rather, weather, feather, leather, ether, eat her, eater
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:25756: filles ==> files, fills, filled
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:25762: inout ==> input, in out
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:26084: passsword ==> password
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:26138: contro ==> control
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:26220: wisper ==> whisper
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:26310: paranoya ==> paranoia
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:26476: pincher ==> pinscher
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:26606: busines ==> business
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:26832: threee ==> three
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:27073: sistem ==> system
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:27743: technik ==> technique
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:27791: chech ==> check, czech
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:27973: contex ==> context
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:28188: indien ==> indian, endian
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:28275: countr ==> counter, contour, country, county
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:28486: tomatoe ==> tomato
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:28547: fliper ==> flipper
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:28713: chello ==> cello
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:28932: burbon ==> bourbon
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:29030: carisma ==> charisma
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:29126: classe ==> class, classes
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:29617: acess ==> access
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:29665: tolkein ==> tolkien
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/passwords.txt:29894: guesss ==> guess, guesses
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:853: goin ==> going
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:981: doin ==> doing, do in, coin
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:1242: nothin ==> nothing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:1364: somethin ==> something
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:1454: talkin ==> talking, talk in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:1496: gettin ==> getting
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:1600: comin ==> coming, com in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:1618: lookin ==> looking, look in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:2167: thinkin ==> thinking, think in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:2178: tryin ==> trying, try in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:2540: claus ==> clause
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:2678: takin ==> taking, taken, akin
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:2739: makin ==> making, main
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:2930: pres ==> press
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:2942: wont ==> won't
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:3003: workin ==> working, work in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:3066: havin ==> having, haven
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:3095: bein ==> being, be in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:3131: allright ==> all right, alright
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:3397: waitin ==> waiting, wait in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:3605: tweek ==> tweak
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:3728: runnin ==> running
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:3785: sittin ==> sitting
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:3872: walkin ==> walking, walk in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:3881: livin ==> living, liven, livid
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:3886: discreet ==> discrete
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:3914: playin ==> playing, play in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:4200: askin ==> asking, ask in, akin, skin, a skin
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:4213: brunch ==> branch
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:4234: hangin ==> hanging, hang in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:4320: callin ==> calling, call in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:4478: whit ==> with, white
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:4583: puttin ==> putting, putt in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:4595: givin ==> giving, given
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:5208: drivin ==> driving, driven, drive-in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:5360: startin ==> starting
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:5366: seein ==> seeing, see in, seen, stein
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:5395: everytime ==> every time
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:5412: tippin ==> tipping
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:5425: loner ==> longer
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:5482: pickin ==> picking, pick in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:5535: leavin ==> leaving, leaven
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:5560: stayin ==> staying, stay in, stain
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:5575: keepin ==> keeping, keep in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:5653: wearin ==> wearing, wear in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:5690: fightin ==> fighting, fight in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:6334: tread ==> thread, treat
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:6449: laughin ==> laughing, laugh in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:6505: stings ==> strings
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:6582: breakin ==> breaking, break in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:6622: losin ==> losing, login, loin, rosin
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:6827: dancin ==> dancing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:6958: whats ==> what's
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:7193: trippin ==> tripping
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:7197: thats ==> that's
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:7310: throwin ==> throwing, throw in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:7494: hittin ==> hitting
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:7496: headin ==> heading, head in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:7617: happenin ==> happening, happen in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:7724: panting ==> painting
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:7828: youre ==> your, you're
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8036: messin ==> messing, mess in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8053: hopin ==> hoping, hop in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8188: jumpin ==> jumping, jump in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8248: bringin ==> bringing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8506: manger ==> manager
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8538: fixin ==> fixing, fix in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8588: apperantly ==> apparently
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8675: missin ==> mission, missing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8687: listenin ==> listening, listen in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8880: meetin ==> meeting, meet in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8914: heigh ==> height, high
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8969: checkin ==> checking, check in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8980: beatin ==> beating, beat in, beaten
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8998: wonderin ==> wondering, wonder in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:8999: wither ==> either, whether, weather
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:9043: sleepin ==> sleeping, sleep in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:9100: knowin ==> knowing, know in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:9185: bleedin ==> bleeding, bleed in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:9229: speakin ==> speaking, speak in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:9310: huntin ==> hunting, hunt in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:9315: helpin ==> helping, help in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:9362: commend ==> comment, command
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:9598: cheatin ==> cheating, cheat in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:9625: anythin ==> anything, any thin
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:9685: showin ==> showing, show in, shown
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:9909: swimmin ==> swimming
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:10201: settin ==> setting
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:10229: protestors ==> protesters
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:10363: dealin ==> dealing, deal in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:10667: couldn ==> could, couldn't
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:10857: packin ==> packing, pack in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:10879: momento ==> memento
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:10899: lightening ==> lightning, lighting
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:10973: embarassing ==> embarrassing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:10986: didnt ==> didn't
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:10997: cryto ==> crypto
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11020: carryin ==> carrying, carry in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11045: biding ==> binding, bidding
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11188: readin ==> reading, read in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11275: infarction ==> infraction
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11373: countin ==> counting, count in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11393: catchin ==> catching, catch in, cat chin
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11419: beggin ==> begin, begging
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11430: aroun ==> around
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11448: writin ==> writing, writ in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11495: theres ==> there's
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11543: savin ==> saving, satin, sarin
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11589: pharoah ==> pharaoh
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11610: occured ==> occurred
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11646: loosing ==> losing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11701: growin ==> growing, grow in, groin
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11736: fallow ==> follow
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11751: donot ==> do not, donut
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11777: copping ==> coping, copying, cropping
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11797: chasin ==> chasing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11884: wantin ==> wanting, want in, wanton
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11911: tought ==> thought, taught, tough
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:11998: recuse ==> recurse
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:12003: recieved ==> received
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:12138: hendler ==> handler
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:12268: burnin ==> burning, burn in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:12275: breathin ==> breathing, breath in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:12285: becuase ==> because
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:12365: treatin ==> treating, treat in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:12405: stoppin ==> stopping
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:12435: singed ==> signed, singled, sang, sung
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:12615: hidin ==> hiding, hid in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:12778: wierd ==> weird
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:12836: this'd ==> this would
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13132: harrassment ==> harassment
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13185: embarassed ==> embarrassed
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13186: embarass ==> embarrass
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13191: eigth ==> eighth, eight
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13256: commited ==> committed
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13276: changin ==> changing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13311: belive ==> believe
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13406: tommorow ==> tomorrow
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13642: learnin ==> learning, learn in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13731: forgettin ==> forgetting
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13735: floatin ==> floating, float in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13757: excercises ==> exercises
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13838: committment ==> commitment
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:13848: cleanin ==> cleaning, clean in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:14101: sentance ==> sentence
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:14384: happend ==> happened, happens, happen
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:14452: expresso ==> espresso
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:14454: expectin ==> expecting, expect in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:14543: crackin ==> cracking, crack in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:14599: buildin ==> building, build in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:14667: accidently ==> accidentally
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:14685: worryin ==> worrying, worry in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:14803: straightaway ==> straight away
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:14853: singe ==> single
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:14936: quittin ==> quitting
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15209: grabbin ==> grabbing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15287: excercise ==> exercise
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15288: everbody ==> everybody
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15319: draggin ==> dragging
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15362: cruisin ==> cruising
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15379: complainin ==> complaining, complain in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15384: comming ==> coming
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15491: anythng ==> anything
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15577: visitin ==> visiting, visit in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15642: tounge ==> tongue
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15689: supossed ==> supposed
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15726: splittin ==> splitting
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15829: raison ==> reason, raisin
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15891: passin ==> passing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:15960: miniscule ==> minuscule
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16045: irresistable ==> irresistible
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16055: incase ==> in case
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16160: freezin ==> freezing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16168: followin ==> following
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16184: fillin ==> filling, fill in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16236: droppin ==> dropping
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16242: doesnt ==> doesn't, does not
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16314: crated ==> created
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16497: acrost ==> across
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16633: tradin ==> trading, trad in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16656: throwed ==> threw, thrown
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16749: smooter ==> smoother
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16831: rittle ==> riddle, rattle
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16835: ringin ==> ringing, ring in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16851: remore ==> remote, remove
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16853: remeber ==> remember
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16889: publically ==> publicly
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16895: protectin ==> protecting, protect in, protection
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:16911: prefex ==> prefix
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17034: needin ==> needing, need in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17092: marchin ==> marching, march in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17129: leanin ==> leaning, lean in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17150: klicks ==> clicks
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17186: interestin ==> interesting, interest in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17339: fourty ==> forty
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17389: everthing ==> everything
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17407: easely ==> easily
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17478: definatly ==> definitely
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17500: curiousity ==> curiosity
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17507: crashers ==> crashes
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17509: coverin ==> covering, cover in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17552: choos ==> choose
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17588: busses ==> buses
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17608: bouncin ==> bouncing
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17789: wasnt ==> wasn't
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17869: tryed ==> tried
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17885: trainin ==> training, train in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17895: tommorrow ==> tomorrow
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17907: timin ==> timing, timid
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17949: suprise ==> surprise
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:17996: spendin ==> spending, spend in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18069: sendin ==> sending, send in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18150: realy ==> really, relay
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18152: reachin ==> reaching, reach in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18242: perservere ==> persevere
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18310: ofthe ==> of the
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18351: musn't ==> mustn't
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18467: leadin ==> leading, lead in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18551: infact ==> in fact
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18577: imbedded ==> embedded
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18649: guerillas ==> guerrillas
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18861: dependant ==> dependent
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18875: datin ==> dating, satin, latin
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18919: coolin ==> cooling, cool in, coolie
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18968: chargin ==> charging
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18979: cemetary ==> cemetery
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:18986: carrear ==> career
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:19077: beginnin ==> beginning
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:19078: begining ==> beginning
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/us_tv_and_film.txt:19100: aways ==> always, away
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:796: aline ==> align, a line, line, saline
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:915: ines ==> lines
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:1126: carmel ==> caramel
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:1156: marge ==> merge
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:1167: flor ==> floor, flow
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:1269: juli ==> july
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:1303: chanel ==> channel
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:1306: cristal ==> crystal
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:1576: sade ==> sad
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:1617: carin ==> caring, car in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:1932: lien ==> line
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:2044: elease ==> release
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:2810: lasonya ==> lasagna
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:3002: chanell ==> channel
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:3507: meda ==> meta, medal, media
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/female_names.txt:3620: cyrstal ==> crystal
+runtime/ai_cli_bridge/profiles/main/Default/Network Persistent State:1: doubleclick ==> double-click
+runtime/ai_cli_bridge/profiles/main/Default/Network Persistent State:1: doubleclick ==> double-click
+runtime/ai_cli_bridge/profiles/main/Default/Network Persistent State:1: doubleclick ==> double-click
+runtime/ai_cli_bridge/profiles/main/Default/Network Persistent State:1: doubleclick ==> double-click
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:796: aline ==> align, a line, line, saline
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:915: ines ==> lines
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:1126: carmel ==> caramel
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:1156: marge ==> merge
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:1167: flor ==> floor, flow
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:1269: juli ==> july
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:1303: chanel ==> channel
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:1306: cristal ==> crystal
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:1576: sade ==> sad
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:1617: carin ==> caring, car in
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:1932: lien ==> line
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:2044: elease ==> release
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:2810: lasonya ==> lasagna
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:3002: chanell ==> channel
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:3507: meda ==> meta, medal, media
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/female_names.txt:3620: cyrstal ==> crystal
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:169: hart ==> heart, harm
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:676: shepard ==> shepherd
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:887: childs ==> children, child's
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:1019: mata ==> meta, mater
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:1183: holliday ==> holiday
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:1276: devine ==> define, divine
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:1376: winn ==> win
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:1567: gage ==> gauge
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:1610: leary ==> leery
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:1859: patten ==> pattern, patent
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:1880: brower ==> browser
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:1916: skelton ==> skeleton
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:2061: pease ==> peace, piece, please, lease
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:2080: cleary ==> clearly
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:2641: smoot ==> smooth
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:3056: tennant ==> tenant, pennant
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:3073: mabe ==> maybe
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:3266: wirth ==> with, worth
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:3295: folse ==> false
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:3324: hass ==> hash
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:3327: covert ==> convert, cover, covet
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:3407: buss ==> bus
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:3508: nealy ==> nearly, newly
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:3596: flagg ==> flag
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:4013: zink ==> zinc
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:4139: benge ==> binge
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:4382: callis ==> callus
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:4399: mathes ==> matches
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:4469: hight ==> height, high
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:4513: vermillion ==> vermilion
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:4538: cotten ==> cotton
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:4650: theis ==> this, thesis
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:5031: grammer ==> grammar
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:5110: waring ==> warning
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:5204: mapp ==> map
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:5232: suttles ==> shuttles
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:5332: groth ==> growth
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:5687: soler ==> solver, solar, solely
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:5828: tunnell ==> tunnel
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:5918: berkley ==> berkeley
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:5939: loos ==> loose, lose
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:6020: wight ==> weight, white, right, write
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:6177: appling ==> applying, appalling
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:6417: markey ==> marquee
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:6575: suttle ==> subtle, shuttle
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:6648: rasberry ==> raspberry
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:6662: mattern ==> pattern, matter
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:6826: cann ==> can
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:6883: gard ==> guard
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:6996: hepler ==> helper
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:7034: stanger ==> stranger, stinger, stagger
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:7048: ream ==> stream
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:7219: murr ==> myrrh
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:7237: jaques ==> jacques
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:7281: tittle ==> title
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:7348: ballance ==> balance
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:7422: wille ==> will
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:7436: sargeant ==> sergeant
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:7488: collum ==> column
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:7605: sergent ==> sergeant
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:7690: voight ==> voigt
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:7775: troup ==> troupe
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:8049: unknow ==> unknown
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:8108: fromm ==> from
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:8123: brough ==> brought, borough, bough, trough
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:8188: lamas ==> llamas
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:8221: faught ==> fought
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:8458: devault ==> default
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:8565: furst ==> first
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:8975: leasure ==> leisure
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:9168: reding ==> reading
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:9649: sheilds ==> shields
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:9684: litteral ==> literal
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:9761: servin ==> serving
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:9878: bever ==> never
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/surnames.txt:9900: stange ==> strange, stage, stance
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:169: hart ==> heart, harm
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:676: shepard ==> shepherd
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:887: childs ==> children, child's
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:1019: mata ==> meta, mater
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:1183: holliday ==> holiday
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:1276: devine ==> define, divine
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:1376: winn ==> win
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:1567: gage ==> gauge
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:1610: leary ==> leery
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:1859: patten ==> pattern, patent
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:1880: brower ==> browser
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:1916: skelton ==> skeleton
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:2061: pease ==> peace, piece, please, lease
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:2080: cleary ==> clearly
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:2641: smoot ==> smooth
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:3056: tennant ==> tenant, pennant
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:3073: mabe ==> maybe
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:3266: wirth ==> with, worth
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:3295: folse ==> false
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:3324: hass ==> hash
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:3327: covert ==> convert, cover, covet
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:3407: buss ==> bus
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:3508: nealy ==> nearly, newly
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:3596: flagg ==> flag
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:4013: zink ==> zinc
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:4139: benge ==> binge
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:4382: callis ==> callus
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:4399: mathes ==> matches
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:4469: hight ==> height, high
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:4513: vermillion ==> vermilion
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:4538: cotten ==> cotton
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:4650: theis ==> this, thesis
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:5031: grammer ==> grammar
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:5110: waring ==> warning
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:5204: mapp ==> map
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:5232: suttles ==> shuttles
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:5332: groth ==> growth
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:5687: soler ==> solver, solar, solely
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:5828: tunnell ==> tunnel
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:5918: berkley ==> berkeley
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:5939: loos ==> loose, lose
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:6020: wight ==> weight, white, right, write
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:6177: appling ==> applying, appalling
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:6417: markey ==> marquee
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:6575: suttle ==> subtle, shuttle
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:6648: rasberry ==> raspberry
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:6662: mattern ==> pattern, matter
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:6826: cann ==> can
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:6883: gard ==> guard
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:6996: hepler ==> helper
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:7034: stanger ==> stranger, stinger, stagger
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:7048: ream ==> stream
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:7219: murr ==> myrrh
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:7237: jaques ==> jacques
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:7281: tittle ==> title
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:7348: ballance ==> balance
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:7422: wille ==> will
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:7436: sargeant ==> sergeant
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:7488: collum ==> column
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:7605: sergent ==> sergeant
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:7690: voight ==> voigt
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:7775: troup ==> troupe
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:8049: unknow ==> unknown
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:8108: fromm ==> from
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:8123: brough ==> brought, borough, bough, trough
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:8188: lamas ==> llamas
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:8221: faught ==> fought
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:8458: devault ==> default
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:8565: furst ==> first
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:8975: leasure ==> leisure
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:9168: reding ==> reading
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:9649: sheilds ==> shields
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:9684: litteral ==> literal
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:9761: servin ==> serving
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:9878: bever ==> never
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/surnames.txt:9900: stange ==> strange, stage, stance
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/male_names.txt:531: ned ==> need, end, nod
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/male_names.txt:555: noe ==> not, no, node, note, know, now
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/male_names.txt:764: donn ==> done, don
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/male_names.txt:919: mose ==> more, mouse, mode
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/male_names.txt:941: malcom ==> malcolm
+runtime/ai_cli_bridge/profiles/main/ZxcvbnData/3/male_names.txt:943: jospeh ==> joseph
+runtime/daemon/browser/profiles/multi_ai_cdp/PlusAddressBlocklist/3/manifest.json:3: SME ==> SAME, SEME, SOME, SMS
+runtime/ai_cli_bridge/profiles/main/Local State:1: UE ==> USE, DUE
+runtime/daemon/browser/profiles/multi_ai_cdp/Subresource Filter/Unindexed Rules/9.62.0/LICENSE.txt:54: synching ==> syncing
+runtime/daemon/browser/profiles/multi_ai_cdp/Subresource Filter/Unindexed Rules/9.62.0/LICENSE.txt:289: MERCHANTIBILITY ==> MERCHANTABILITY
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:3088: serie ==> series
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:3693: empress ==> impress
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:4793: rouge ==> rogue
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:5431: bloc ==> block
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:5640: chancel ==> cancel
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:5783: mater ==> matter, master, mother
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:6501: parma ==> param
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:7276: provence ==> province
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:7861: handel ==> handle
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:8310: trough ==> through
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:8366: somme ==> some
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:8524: pleas ==> please
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:8581: revered ==> reversed
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:9140: parana ==> piranha
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:9638: humber ==> number
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:10334: attache ==> attaché, attached, attach
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:11571: accademia ==> academia
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:12265: theses ==> these, thesis
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:13166: despatches ==> dispatches
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:13284: woking ==> working, waking
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:13348: groupe ==> grouped, group
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:13482: guerilla ==> guerrilla
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:13598: worthing ==> worth, meriting
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:14032: weill ==> will
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:14421: unser ==> under, unset, unsure, user
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:15252: normale ==> normal
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:15256: herat ==> heart
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:15357: regio ==> region
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:16108: frome ==> from
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:16343: presse ==> pressed, press
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:16383: lifes ==> lives
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:16552: celle ==> cell
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:16556: hander ==> handler
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:16928: programing ==> programming
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:17013: ponting ==> pointing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:17575: archiv ==> archive
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:17742: despatched ==> dispatched
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:18375: oriente ==> oriented
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:18697: enver ==> never
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:18922: cyclin ==> cycling
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:19512: coverts ==> converts, covers, covets
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:19530: corus ==> chorus
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:20194: fulfilment ==> fulfillment
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:20353: connexion ==> connection
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:20360: chambre ==> chamber
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:20361: despatch ==> dispatch
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:20761: fille ==> file, fill, filled
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:20826: unter ==> under
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:21214: pugin ==> plugin
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:21516: academica ==> academia
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:21839: leaded ==> led, lead
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:22001: goole ==> google
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:22405: equipments ==> equipment
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:22717: profesional ==> professional
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:22899: blocs ==> blocks
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:22978: mouvement ==> movement
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:23046: bootle ==> bottle
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:23127: homogenous ==> homogeneous
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:23871: modell ==> model
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:24481: gardai ==> gardaí
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:24973: arges ==> args
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:26077: tring ==> trying, string, ring
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:26655: studi ==> study, studio
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:26788: finial ==> final
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:28075: americanus ==> americans
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:28146: commends ==> comments, commands
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:28746: chater ==> chapter
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:28829: empted ==> emptied
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/english_wikipedia.txt:28928: wapping ==> wrapping, swapping, warping
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/male_names.txt:531: ned ==> need, end, nod
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/male_names.txt:555: noe ==> not, no, node, note, know, now
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/male_names.txt:764: donn ==> done, don
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/male_names.txt:919: mose ==> more, mouse, mode
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/male_names.txt:941: malcom ==> malcolm
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/male_names.txt:943: jospeh ==> joseph
+runtime/ai_cli_bridge/profiles/main/PlusAddressBlocklist/3/manifest.json:3: SME ==> SAME, SEME, SOME, SMS
+runtime/daemon/browser/profiles/multi_ai_cdp/Local State:1: UE ==> USE, DUE
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:853: goin ==> going
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:981: doin ==> doing, do in, coin
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:1242: nothin ==> nothing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:1364: somethin ==> something
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:1454: talkin ==> talking, talk in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:1496: gettin ==> getting
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:1600: comin ==> coming, com in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:1618: lookin ==> looking, look in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:2167: thinkin ==> thinking, think in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:2178: tryin ==> trying, try in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:2540: claus ==> clause
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:2678: takin ==> taking, taken, akin
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:2739: makin ==> making, main
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:2930: pres ==> press
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:2942: wont ==> won't
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:3003: workin ==> working, work in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:3066: havin ==> having, haven
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:3095: bein ==> being, be in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:3131: allright ==> all right, alright
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:3397: waitin ==> waiting, wait in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:3605: tweek ==> tweak
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:3728: runnin ==> running
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:3785: sittin ==> sitting
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:3872: walkin ==> walking, walk in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:3881: livin ==> living, liven, livid
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:3886: discreet ==> discrete
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:3914: playin ==> playing, play in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:4200: askin ==> asking, ask in, akin, skin, a skin
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:4213: brunch ==> branch
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:4234: hangin ==> hanging, hang in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:4320: callin ==> calling, call in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:4478: whit ==> with, white
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:4583: puttin ==> putting, putt in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:4595: givin ==> giving, given
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:5208: drivin ==> driving, driven, drive-in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:5360: startin ==> starting
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:5366: seein ==> seeing, see in, seen, stein
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:5395: everytime ==> every time
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:5412: tippin ==> tipping
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:5425: loner ==> longer
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:5482: pickin ==> picking, pick in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:5535: leavin ==> leaving, leaven
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:5560: stayin ==> staying, stay in, stain
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:5575: keepin ==> keeping, keep in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:5653: wearin ==> wearing, wear in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:5690: fightin ==> fighting, fight in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:6334: tread ==> thread, treat
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:6449: laughin ==> laughing, laugh in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:6505: stings ==> strings
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:6582: breakin ==> breaking, break in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:6622: losin ==> losing, login, loin, rosin
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:6827: dancin ==> dancing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:6958: whats ==> what's
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:7193: trippin ==> tripping
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:7197: thats ==> that's
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:7310: throwin ==> throwing, throw in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:7494: hittin ==> hitting
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:7496: headin ==> heading, head in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:7617: happenin ==> happening, happen in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:7724: panting ==> painting
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:7828: youre ==> your, you're
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8036: messin ==> messing, mess in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8053: hopin ==> hoping, hop in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8188: jumpin ==> jumping, jump in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8248: bringin ==> bringing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8506: manger ==> manager
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8538: fixin ==> fixing, fix in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8588: apperantly ==> apparently
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8675: missin ==> mission, missing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8687: listenin ==> listening, listen in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8880: meetin ==> meeting, meet in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8914: heigh ==> height, high
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8969: checkin ==> checking, check in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8980: beatin ==> beating, beat in, beaten
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8998: wonderin ==> wondering, wonder in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:8999: wither ==> either, whether, weather
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:9043: sleepin ==> sleeping, sleep in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:9100: knowin ==> knowing, know in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:9185: bleedin ==> bleeding, bleed in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:9229: speakin ==> speaking, speak in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:9310: huntin ==> hunting, hunt in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:9315: helpin ==> helping, help in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:9362: commend ==> comment, command
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:9598: cheatin ==> cheating, cheat in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:9625: anythin ==> anything, any thin
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:9685: showin ==> showing, show in, shown
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:9909: swimmin ==> swimming
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:10201: settin ==> setting
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:10229: protestors ==> protesters
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:10363: dealin ==> dealing, deal in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:10667: couldn ==> could, couldn't
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:10857: packin ==> packing, pack in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:10879: momento ==> memento
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:10899: lightening ==> lightning, lighting
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:10973: embarassing ==> embarrassing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:10986: didnt ==> didn't
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:10997: cryto ==> crypto
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11020: carryin ==> carrying, carry in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11045: biding ==> binding, bidding
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11188: readin ==> reading, read in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11275: infarction ==> infraction
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11373: countin ==> counting, count in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11393: catchin ==> catching, catch in, cat chin
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11419: beggin ==> begin, begging
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11430: aroun ==> around
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11448: writin ==> writing, writ in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11495: theres ==> there's
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11543: savin ==> saving, satin, sarin
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11589: pharoah ==> pharaoh
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11610: occured ==> occurred
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11646: loosing ==> losing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11701: growin ==> growing, grow in, groin
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11736: fallow ==> follow
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11751: donot ==> do not, donut
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11777: copping ==> coping, copying, cropping
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11797: chasin ==> chasing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11884: wantin ==> wanting, want in, wanton
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11911: tought ==> thought, taught, tough
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:11998: recuse ==> recurse
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:12003: recieved ==> received
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:12138: hendler ==> handler
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:12268: burnin ==> burning, burn in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:12275: breathin ==> breathing, breath in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:12285: becuase ==> because
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:12365: treatin ==> treating, treat in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:12405: stoppin ==> stopping
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:12435: singed ==> signed, singled, sang, sung
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:12615: hidin ==> hiding, hid in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:12778: wierd ==> weird
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:12836: this'd ==> this would
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13132: harrassment ==> harassment
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13185: embarassed ==> embarrassed
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13186: embarass ==> embarrass
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13191: eigth ==> eighth, eight
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13256: commited ==> committed
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13276: changin ==> changing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13311: belive ==> believe
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13406: tommorow ==> tomorrow
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13642: learnin ==> learning, learn in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13731: forgettin ==> forgetting
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13735: floatin ==> floating, float in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13757: excercises ==> exercises
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13838: committment ==> commitment
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:13848: cleanin ==> cleaning, clean in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:14101: sentance ==> sentence
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:14384: happend ==> happened, happens, happen
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:14452: expresso ==> espresso
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:14454: expectin ==> expecting, expect in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:14543: crackin ==> cracking, crack in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:14599: buildin ==> building, build in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:14667: accidently ==> accidentally
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:14685: worryin ==> worrying, worry in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:14803: straightaway ==> straight away
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:14853: singe ==> single
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:14936: quittin ==> quitting
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15209: grabbin ==> grabbing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15287: excercise ==> exercise
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15288: everbody ==> everybody
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15319: draggin ==> dragging
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15362: cruisin ==> cruising
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15379: complainin ==> complaining, complain in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15384: comming ==> coming
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15491: anythng ==> anything
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15577: visitin ==> visiting, visit in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15642: tounge ==> tongue
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15689: supossed ==> supposed
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15726: splittin ==> splitting
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15829: raison ==> reason, raisin
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15891: passin ==> passing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:15960: miniscule ==> minuscule
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16045: irresistable ==> irresistible
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16055: incase ==> in case
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16160: freezin ==> freezing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16168: followin ==> following
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16184: fillin ==> filling, fill in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16236: droppin ==> dropping
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16242: doesnt ==> doesn't, does not
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16314: crated ==> created
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16497: acrost ==> across
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16633: tradin ==> trading, trad in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16656: throwed ==> threw, thrown
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16749: smooter ==> smoother
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16831: rittle ==> riddle, rattle
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16835: ringin ==> ringing, ring in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16851: remore ==> remote, remove
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16853: remeber ==> remember
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16889: publically ==> publicly
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16895: protectin ==> protecting, protect in, protection
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:16911: prefex ==> prefix
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17034: needin ==> needing, need in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17092: marchin ==> marching, march in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17129: leanin ==> leaning, lean in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17150: klicks ==> clicks
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17186: interestin ==> interesting, interest in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17339: fourty ==> forty
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17389: everthing ==> everything
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17407: easely ==> easily
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17478: definatly ==> definitely
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17500: curiousity ==> curiosity
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17507: crashers ==> crashes
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17509: coverin ==> covering, cover in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17552: choos ==> choose
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17588: busses ==> buses
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17608: bouncin ==> bouncing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17789: wasnt ==> wasn't
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17869: tryed ==> tried
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17885: trainin ==> training, train in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17895: tommorrow ==> tomorrow
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17907: timin ==> timing, timid
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17949: suprise ==> surprise
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:17996: spendin ==> spending, spend in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18069: sendin ==> sending, send in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18150: realy ==> really, relay
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18152: reachin ==> reaching, reach in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18242: perservere ==> persevere
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18310: ofthe ==> of the
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18351: musn't ==> mustn't
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18467: leadin ==> leading, lead in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18551: infact ==> in fact
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18577: imbedded ==> embedded
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18649: guerillas ==> guerrillas
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18861: dependant ==> dependent
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18875: datin ==> dating, satin, latin
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18919: coolin ==> cooling, cool in, coolie
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18968: chargin ==> charging
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18979: cemetary ==> cemetery
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:18986: carrear ==> career
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:19077: beginnin ==> beginning
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:19078: begining ==> beginning
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/us_tv_and_film.txt:19100: aways ==> always, away
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:44: tigger ==> trigger
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:560: cunt ==> count, hunt
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:1005: passwor ==> password
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:1307: licker ==> liquor
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:1641: lightnin ==> lightning
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:1882: technics ==> techniques
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:1998: microsof ==> microsoft
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:2314: wrestlin ==> wrestling
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:2343: lolipop ==> lollipop
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:2359: guiness ==> guinness
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:2402: cunts ==> counts, hunts
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:2467: absolut ==> absolute
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:2801: sting ==> string
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:2943: buddah ==> buddha
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:2958: mian ==> main, moan
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:3103: armagedon ==> armageddon
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:3217: pheonix ==> phoenix
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:3565: pasword ==> password
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:3810: beng ==> being
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:3878: gameboy ==> game boy
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:4345: americ ==> america, amebic
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:4812: assasin ==> assassin
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:4836: capetown ==> cape town
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:4889: millenium ==> millennium
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:4973: ceasar ==> caesar
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:5344: masterbate ==> masturbate
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:5458: mone ==> mono, money, none
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:5541: freee ==> free
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:5728: rollin ==> rolling, roll in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:5884: discus ==> discuss
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:5921: masterbating ==> masturbating
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:5928: parlament ==> parliament
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:5987: diamon ==> diamond
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:6126: amature ==> amateur, armature, a mature
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:6130: womans ==> woman's, women
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:6259: gallaries ==> galleries
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:6350: passord ==> password
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:6440: bizzare ==> bizarre
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:6633: whoknows ==> who knows
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:6688: wizzard ==> wizard
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:6764: architec ==> architect
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:6823: methos ==> methods, method
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:7032: samue ==> same, samuel
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:7287: litle ==> little
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:7310: strat ==> start, strata
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:7650: yello ==> yellow
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:7771: succes ==> success
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:8074: pumkin ==> pumpkin
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:8187: ceaser ==> caesar
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:8202: marketin ==> marketing, market in
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:8239: modles ==> models, modules
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:8635: slippy ==> slippery
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:8648: storys ==> stories, storeys
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:8772: hellow ==> hello
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:8785: racoon ==> raccoon
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:9063: januar ==> january
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:9143: patter ==> pattern
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:9286: saphire ==> sapphire
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:9325: nickle ==> nickel
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:9646: characte ==> character
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:9711: airborn ==> airborne
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:10079: oktober ==> october
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:10683: excell ==> excel
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:10768: ganster ==> gangster
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:10782: japanes ==> japanese
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:11078: ghandi ==> gandhi
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:11201: mavrick ==> maverick
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:11203: cheeta ==> cheetah
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:11295: knowledg ==> knowledge
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:11706: hopefull ==> hopeful, hopefully
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:12408: poppin ==> popping
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:12626: deamon ==> daemon
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:12731: choclate ==> chocolate
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:12867: awsome ==> awesome
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:13081: anonymou ==> anonymous
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:13161: findout ==> find out
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:13503: infinit ==> infinite
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:13758: amatuers ==> amateurs
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:13919: lazer ==> laser
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:14080: womens ==> women's, women
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:14135: sherif ==> sheriff
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:14168: independ ==> independent
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:14528: operatio ==> operation
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:14562: bannana ==> banana, bandana
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:14571: acces ==> access
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:14604: thered ==> thread, the red
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:14821: domin ==> doming, domain, domino
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:14996: cruzer ==> cruiser
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:15005: extacy ==> ecstasy
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:15034: profesor ==> professor
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:15184: extrem ==> extremum, extreme
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:15235: crasher ==> crash
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:15270: pharoh ==> pharaoh
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:15353: cigarett ==> cigarette
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:15576: ardvark ==> aardvark
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:15777: poligon ==> polygon
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:15793: technic ==> technique
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:15899: advantag ==> advantage
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:16224: construc ==> construct
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:16484: potatoe ==> potato
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:16601: skipp ==> skip, skipped
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:16711: sucess ==> success
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:16737: pyramide ==> pyramid
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:16750: programm ==> program, programme
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:16990: comander ==> commander, commandeer
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:17660: cameleon ==> chameleon
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:17706: bulle ==> bullet
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:17940: espace ==> escape
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:18104: standart ==> standard
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:18508: februar ==> february
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:18531: millenia ==> millennia
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:18557: containe ==> contain, contained, container, contains
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:18924: shoppin ==> shopping
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:18984: structur ==> structure
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:19140: stoopid ==> stupid, stooped
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:19172: monkies ==> monkeys
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:19238: aristote ==> aristotle
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:19299: widder ==> wider
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:19554: sentinal ==> sentinel
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:19667: alway ==> always
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:19821: milion ==> million
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:20196: spagetti ==> spaghetti
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:20202: napolean ==> napoleon
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:20340: securit ==> security
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:20391: searchin ==> searching
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:20537: cornel ==> colonel
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:20624: sprin ==> spring, sprint, spin, spain, sarin, sprig, sprit
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:20632: satelite ==> satellite
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:20779: associat ==> associate
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:20846: vengence ==> vengeance
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21113: thicknes ==> thickness, thickens
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21126: tatoo ==> tattoo
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21405: fotograf ==> photograph
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21471: missle ==> missile
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21483: positiv ==> positive
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21493: fortunat ==> fortunate
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21539: nightime ==> nighttime
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21562: dezember ==> december
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21635: bogos ==> bogus
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21710: villan ==> villain
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21803: inbed ==> embed
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21845: chane ==> change, chain
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21851: faktor ==> factor
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21902: godess ==> goddess
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:21994: registr ==> register
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:22024: mistic ==> mystic
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:22069: mistery ==> mystery
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:22155: comando ==> commando
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:22215: testin ==> testing
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:22474: sheeps ==> sheep
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:22477: tiggers ==> triggers
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:22494: shamen ==> shaman, shamans
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:22573: messenge ==> message
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:22635: peopl ==> people
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:22849: exclusiv ==> exclusive
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:23199: differen ==> different
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:23264: importan ==> important, importance
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:23268: doller ==> dollar
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:24217: signatur ==> signature
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:24415: comand ==> command
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:24562: dameon ==> daemon, demon, damien
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:25029: connecte ==> connected
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:25190: hampster ==> hamster
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:25369: assasins ==> assassins
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:25467: medias ==> media, mediums
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:25686: eather ==> either, rather, weather, feather, leather, ether, eat her, eater
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:25756: filles ==> files, fills, filled
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:25762: inout ==> input, in out
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:26084: passsword ==> password
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:26138: contro ==> control
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:26220: wisper ==> whisper
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:26310: paranoya ==> paranoia
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:26476: pincher ==> pinscher
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:26606: busines ==> business
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:26832: threee ==> three
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:27073: sistem ==> system
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:27743: technik ==> technique
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:27791: chech ==> check, czech
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:27973: contex ==> context
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:28188: indien ==> indian, endian
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:28275: countr ==> counter, contour, country, county
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:28486: tomatoe ==> tomato
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:28547: fliper ==> flipper
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:28713: chello ==> cello
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:28932: burbon ==> bourbon
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:29030: carisma ==> charisma
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:29126: classe ==> class, classes
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:29617: acess ==> access
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:29665: tolkein ==> tolkien
+runtime/daemon/browser/profiles/multi_ai_cdp/ZxcvbnData/3/passwords.txt:29894: guesss ==> guess, guesses
+runtime/ai_cli_bridge/profiles/main/FirstPartySetsPreloaded/2025.7.24.0/sets.json:47: repid ==> rapid
+WARNING: Cannot decode file using encoding "utf-8": runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set
+WARNING: Trying next encoding "iso-8859-1"
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:44: Bu ==> By, Be, But, Bug, Bun, Bud, Buy, Bum
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:113: Ot ==> To, Of, Or, Not, It
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:247: bu ==> by, be, but, bug, bun, bud, buy, bum
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:468: fOm ==> from, form
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:470: te ==> the, be, we, to
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:512: tE ==> the, be, we, to
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:607: nd ==> and, 2nd
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:617: ND ==> AND, 2ND
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:741: BU ==> BY, BE, BUT, BUG, BUN, BUD, BUY, BUM
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:774: OT ==> TO, OF, OR, NOT, IT
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:809: oT ==> to, of, or, not, it
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:959: MIS ==> MISS, MIST
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:1136: Te ==> The, Be, We, To
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:1144: Te ==> The, Be, We, To
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:1260: OT ==> TO, OF, OR, NOT, IT
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:1302: bU ==> by, be, but, bug, bun, bud, buy, bum
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:1402: tE ==> the, be, we, to
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:1429: tE ==> the, be, we, to
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:1450: oT ==> to, of, or, not, it
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:1719: tE ==> the, be, we, to
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:1772: te ==> the, be, we, to
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:1906: FO ==> OF, FOR, TO, DO, GO
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2058: Bu ==> By, Be, But, Bug, Bun, Bud, Buy, Bum
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2099: BU ==> BY, BE, BUT, BUG, BUN, BUD, BUY, BUM
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2114: oT ==> to, of, or, not, it
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2139: Fo ==> Of, For, To, Do, Go
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2249: Ue ==> Use, Due
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2337: WeE ==> we
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2449: tE ==> the, be, we, to
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2520: oll ==> all, ole, old, olly, oil
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2566: BU ==> BY, BE, BUT, BUG, BUN, BUD, BUY, BUM
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2575: Te ==> The, Be, We, To
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2607: Nd ==> And, 2nd
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2607: Nd ==> And, 2nd
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2631: uE ==> use, due
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2653: ue ==> use, due
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2699: bUI ==> buoy, buy
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2877: nD ==> and, 2nd
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2917: fo ==> of, for, to, do, go
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2923: mYe ==> may, my
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2982: uE ==> use, due
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:2989: fO ==> of, for, to, do, go
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3013: Vai ==> Via, Vie
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3015: BU ==> BY, BE, BUT, BUG, BUN, BUD, BUY, BUM
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3062: UE ==> USE, DUE
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3168: NcE ==> once, nice
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3275: TE ==> THE, BE, WE, TO
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3414: FO ==> OF, FOR, TO, DO, GO
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3465: TE ==> THE, BE, WE, TO
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3538: fO ==> of, for, to, do, go
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3589: bU ==> by, be, but, bug, bun, bud, buy, bum
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3717: fO ==> of, for, to, do, go
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3722: uE ==> use, due
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3726: uE ==> use, due
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3817: nd ==> and, 2nd
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:3967: TE ==> THE, BE, WE, TO
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:4110: OT ==> TO, OF, OR, NOT, IT
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:4344: UE ==> USE, DUE
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:4347: bU ==> by, be, but, bug, bun, bud, buy, bum
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:4348: TE ==> THE, BE, WE, TO
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:4388: Bu ==> By, Be, But, Bug, Bun, Bud, Buy, Bum
+runtime/ai_cli_bridge/profiles/main/CertificateRevocation/10091/crl-set:4448: UE ==> USE, DUE
+
+shfmt....................................................................Passed
+shellcheck...............................................................Failed
+- hook id: shellcheck
+- exit code: 1
+
+In scripts/dev-bootstrap.sh line 1:
+
+^-- SC2148 (error): Tips depend on target shell and yours is unknown. Add a shebang or a 'shell' directive.
+
+For more information:
+  https://www.shellcheck.net/wiki/SC2148 -- Tips depend on target shell and y...
+
+bandit...................................................................Failed
+- hook id: bandit
+- exit code: 1
+
+Run started:2025-10-27 19:24:05.214476
+
+Test results:
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: ./src/chat_ui/daemon_client.py:292:12
+291	                    logger.info(f"New session response: {data}")
+292	            except Exception:
+293	                pass
+294	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: ./src/chat_ui/daemon_client.py:306:8
+305	                logger.debug(f"DaemonClient closed for {self.base_url}")
+306	        except Exception:
+307	            pass
+308	
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: ./src/chat_ui/startup_manager.py:4:0
+3	
+4	import subprocess
+5	import time
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b607_start_process_with_partial_path.html
+   Location: ./src/chat_ui/startup_manager.py:113:21
+112	            logger.info("Starting daemon via CLI...")
+113	            result = subprocess.run(
+114	                ["ai-cli-bridge", "daemon", "start", "--wait"],
+115	                capture_output=True,
+116	                text=True,
+117	                timeout=self.max_wait_seconds,
+118	            )
+119	
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: ./src/chat_ui/startup_manager.py:113:21
+112	            logger.info("Starting daemon via CLI...")
+113	            result = subprocess.run(
+114	                ["ai-cli-bridge", "daemon", "start", "--wait"],
+115	                capture_output=True,
+116	                text=True,
+117	                timeout=self.max_wait_seconds,
+118	            )
+119	
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: ./src/cli_bridge/commands/daemon_cmd.py:20:0
+19	import signal
+20	import subprocess
+21	
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: ./src/cli_bridge/commands/daemon_cmd.py:239:18
+238	        # Spawn daemon in new session (detached)
+239	        process = subprocess.Popen(
+240	            [sys.executable, "-m", "daemon.main"],
+241	            start_new_session=True,
+242	            stdout=stdout,
+243	            stderr=stderr,
+244	            env=os.environ.copy(),  # Explicit env passthrough (allows AI_APP_CONFIG injection)
+245	        )
+246	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: ./src/cli_bridge/commands/daemon_cmd.py:376:8
+375	            pass
+376	        except Exception:
+377	            pass
+378	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: ./src/cli_bridge/commands/daemon_cmd.py:484:12
+483	                    status_data["daemon_info"] = response.json()
+484	            except Exception:
+485	                pass
+486	
+
+--------------------------------------------------
+>> Issue: [B113:request_without_timeout] Call to requests without timeout
+   Severity: Medium   Confidence: Low
+   CWE: CWE-400 (https://cwe.mitre.org/data/definitions/400.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b113_request_without_timeout.html
+   Location: ./src/cli_bridge/commands/send_cmd.py:52:19
+51	        # The timeout for the request should be slightly longer than the operation timeout
+52	        response = requests.post(daemon_url, json=payload, timeout=timeout + 10)
+53	        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: ./src/cli_bridge/commands/status_cmd.py:60:12
+59	                print(f"  Session Duration:  {dur:.1f}s")
+60	            except Exception:
+61	                pass
+62	        if "ctaw_size" in v or "context_window_tokens" in v:
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: ./src/daemon/browser/connection_pool.py:9:0
+8	import shlex
+9	import subprocess
+10	import urllib.request
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: ./src/daemon/browser/connection_pool.py:231:36
+230	            # Launch browser process
+231	            self._browser_process = subprocess.Popen(
+232	                cmd,
+233	                stdout=subprocess.DEVNULL,
+234	                stderr=subprocess.DEVNULL,
+235	                start_new_session=True,  # Detach from parent
+236	            )
+237	
+
+--------------------------------------------------
+>> Issue: [B310:blacklist] Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected.
+   Severity: Medium   Confidence: High
+   CWE: CWE-22 (https://cwe.mitre.org/data/definitions/22.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/blacklists/blacklist_calls.html#b310-urllib-urlopen
+   Location: ./src/daemon/browser/connection_pool.py:268:21
+267	            try:
+268	                with urllib.request.urlopen(url, timeout=self._probe_timeout_s) as resp:
+269	                    data = json.loads(resp.read().decode("utf-8"))
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b101_assert_used.html
+   Location: ./src/daemon/browser/connection_pool.py:285:8
+284	            await self.start()
+285	        assert self._browser is not None
+286	        return self._browser
+
+--------------------------------------------------
+>> Issue: [B112:try_except_continue] Try, Except, Continue detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b112_try_except_continue.html
+   Location: ./src/daemon/browser/connection_pool.py:321:16
+320	                    pages.extend(ctx.pages)
+321	                except Exception:
+322	                    continue
+323	
+
+--------------------------------------------------
+>> Issue: [B112:try_except_continue] Try, Except, Continue detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b112_try_except_continue.html
+   Location: ./src/daemon/browser/connection_pool.py:329:16
+328	                        return p
+329	                except Exception:
+330	                    continue
+331	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: ./src/daemon/transport/chatgpt_web.py:119:8
+118	                await asyncio.sleep(poll)
+119	        except Exception:
+120	            # Continue anyway; maybe the node is already there
+121	            pass
+122	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: ./src/daemon/transport/chatgpt_web.py:139:8
+138	                text = (await content.inner_text() or "").strip()
+139	        except Exception:
+140	            pass
+141	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: ./src/daemon/transport/claude_web.py:117:8
+116	                await asyncio.sleep(poll)
+117	        except Exception:
+118	            # Continue anyway; maybe the node is already there
+119	            pass
+120	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: ./src/daemon/transport/gemini_web.py:119:8
+118	                await asyncio.sleep(poll)
+119	        except Exception:
+120	            # Continue anyway; maybe the node is already there
+121	            pass
+122	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: ./src/daemon/transport/gemini_web.py:139:8
+138	                text = (await content.inner_text() or "").strip()
+139	        except Exception:
+140	            pass
+141	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: ./src/daemon/transport/web.py:377:20
+376	                        text = (await loc.first.inner_text()) or ""
+377	                    except Exception:
+378	                        pass
+379	                    if len(text) > max_text_len:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: ./src/daemon/transport/web.py:382:8
+381	                    return {"selector": css, "text_snippet": text, "page_url": page.url}
+382	        except Exception:
+383	            pass
+384	        return None
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: ./src/tools/generate_report.py:9:0
+8	import re
+9	import subprocess
+10	import sys
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b607_start_process_with_partial_path.html
+   Location: ./src/tools/generate_report.py:81:14
+80	    try:
+81	        out = subprocess.check_output(
+82	            ["git", *args], cwd=str(cwd), stderr=subprocess.STDOUT, text=True
+83	        )
+84	        return (0, out.strip())
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: ./src/tools/generate_report.py:81:14
+80	    try:
+81	        out = subprocess.check_output(
+82	            ["git", *args], cwd=str(cwd), stderr=subprocess.STDOUT, text=True
+83	        )
+84	        return (0, out.strip())
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: ./src/tools/generate_report.py:298:4
+297	        latest.symlink_to(out_dir.name)
+298	    except Exception:
+299	        pass
+300	    return out_dir
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: src/chat_ui/daemon_client.py:292:12
+291	                    logger.info(f"New session response: {data}")
+292	            except Exception:
+293	                pass
+294	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: src/chat_ui/daemon_client.py:306:8
+305	                logger.debug(f"DaemonClient closed for {self.base_url}")
+306	        except Exception:
+307	            pass
+308	
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: src/chat_ui/startup_manager.py:4:0
+3	
+4	import subprocess
+5	import time
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b607_start_process_with_partial_path.html
+   Location: src/chat_ui/startup_manager.py:113:21
+112	            logger.info("Starting daemon via CLI...")
+113	            result = subprocess.run(
+114	                ["ai-cli-bridge", "daemon", "start", "--wait"],
+115	                capture_output=True,
+116	                text=True,
+117	                timeout=self.max_wait_seconds,
+118	            )
+119	
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: src/chat_ui/startup_manager.py:113:21
+112	            logger.info("Starting daemon via CLI...")
+113	            result = subprocess.run(
+114	                ["ai-cli-bridge", "daemon", "start", "--wait"],
+115	                capture_output=True,
+116	                text=True,
+117	                timeout=self.max_wait_seconds,
+118	            )
+119	
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: src/cli_bridge/commands/daemon_cmd.py:20:0
+19	import signal
+20	import subprocess
+21	
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: src/cli_bridge/commands/daemon_cmd.py:239:18
+238	        # Spawn daemon in new session (detached)
+239	        process = subprocess.Popen(
+240	            [sys.executable, "-m", "daemon.main"],
+241	            start_new_session=True,
+242	            stdout=stdout,
+243	            stderr=stderr,
+244	            env=os.environ.copy(),  # Explicit env passthrough (allows AI_APP_CONFIG injection)
+245	        )
+246	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: src/cli_bridge/commands/daemon_cmd.py:376:8
+375	            pass
+376	        except Exception:
+377	            pass
+378	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: src/cli_bridge/commands/daemon_cmd.py:484:12
+483	                    status_data["daemon_info"] = response.json()
+484	            except Exception:
+485	                pass
+486	
+
+--------------------------------------------------
+>> Issue: [B113:request_without_timeout] Call to requests without timeout
+   Severity: Medium   Confidence: Low
+   CWE: CWE-400 (https://cwe.mitre.org/data/definitions/400.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b113_request_without_timeout.html
+   Location: src/cli_bridge/commands/send_cmd.py:52:19
+51	        # The timeout for the request should be slightly longer than the operation timeout
+52	        response = requests.post(daemon_url, json=payload, timeout=timeout + 10)
+53	        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: src/cli_bridge/commands/status_cmd.py:60:12
+59	                print(f"  Session Duration:  {dur:.1f}s")
+60	            except Exception:
+61	                pass
+62	        if "ctaw_size" in v or "context_window_tokens" in v:
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: src/daemon/browser/connection_pool.py:9:0
+8	import shlex
+9	import subprocess
+10	import urllib.request
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: src/daemon/browser/connection_pool.py:231:36
+230	            # Launch browser process
+231	            self._browser_process = subprocess.Popen(
+232	                cmd,
+233	                stdout=subprocess.DEVNULL,
+234	                stderr=subprocess.DEVNULL,
+235	                start_new_session=True,  # Detach from parent
+236	            )
+237	
+
+--------------------------------------------------
+>> Issue: [B310:blacklist] Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected.
+   Severity: Medium   Confidence: High
+   CWE: CWE-22 (https://cwe.mitre.org/data/definitions/22.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/blacklists/blacklist_calls.html#b310-urllib-urlopen
+   Location: src/daemon/browser/connection_pool.py:268:21
+267	            try:
+268	                with urllib.request.urlopen(url, timeout=self._probe_timeout_s) as resp:
+269	                    data = json.loads(resp.read().decode("utf-8"))
+
+--------------------------------------------------
+>> Issue: [B101:assert_used] Use of assert detected. The enclosed code will be removed when compiling to optimised byte code.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b101_assert_used.html
+   Location: src/daemon/browser/connection_pool.py:285:8
+284	            await self.start()
+285	        assert self._browser is not None
+286	        return self._browser
+
+--------------------------------------------------
+>> Issue: [B112:try_except_continue] Try, Except, Continue detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b112_try_except_continue.html
+   Location: src/daemon/browser/connection_pool.py:321:16
+320	                    pages.extend(ctx.pages)
+321	                except Exception:
+322	                    continue
+323	
+
+--------------------------------------------------
+>> Issue: [B112:try_except_continue] Try, Except, Continue detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b112_try_except_continue.html
+   Location: src/daemon/browser/connection_pool.py:329:16
+328	                        return p
+329	                except Exception:
+330	                    continue
+331	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: src/daemon/transport/chatgpt_web.py:119:8
+118	                await asyncio.sleep(poll)
+119	        except Exception:
+120	            # Continue anyway; maybe the node is already there
+121	            pass
+122	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: src/daemon/transport/chatgpt_web.py:139:8
+138	                text = (await content.inner_text() or "").strip()
+139	        except Exception:
+140	            pass
+141	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: src/daemon/transport/claude_web.py:117:8
+116	                await asyncio.sleep(poll)
+117	        except Exception:
+118	            # Continue anyway; maybe the node is already there
+119	            pass
+120	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: src/daemon/transport/gemini_web.py:119:8
+118	                await asyncio.sleep(poll)
+119	        except Exception:
+120	            # Continue anyway; maybe the node is already there
+121	            pass
+122	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: src/daemon/transport/gemini_web.py:139:8
+138	                text = (await content.inner_text() or "").strip()
+139	        except Exception:
+140	            pass
+141	
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: src/daemon/transport/web.py:377:20
+376	                        text = (await loc.first.inner_text()) or ""
+377	                    except Exception:
+378	                        pass
+379	                    if len(text) > max_text_len:
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: src/daemon/transport/web.py:382:8
+381	                    return {"selector": css, "text_snippet": text, "page_url": page.url}
+382	        except Exception:
+383	            pass
+384	        return None
+
+--------------------------------------------------
+>> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/blacklists/blacklist_imports.html#b404-import-subprocess
+   Location: src/tools/generate_report.py:9:0
+8	import re
+9	import subprocess
+10	import sys
+
+--------------------------------------------------
+>> Issue: [B607:start_process_with_partial_path] Starting a process with a partial executable path
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b607_start_process_with_partial_path.html
+   Location: src/tools/generate_report.py:81:14
+80	    try:
+81	        out = subprocess.check_output(
+82	            ["git", *args], cwd=str(cwd), stderr=subprocess.STDOUT, text=True
+83	        )
+84	        return (0, out.strip())
+
+--------------------------------------------------
+>> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
+   Severity: Low   Confidence: High
+   CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b603_subprocess_without_shell_equals_true.html
+   Location: src/tools/generate_report.py:81:14
+80	    try:
+81	        out = subprocess.check_output(
+82	            ["git", *args], cwd=str(cwd), stderr=subprocess.STDOUT, text=True
+83	        )
+84	        return (0, out.strip())
+
+--------------------------------------------------
+>> Issue: [B110:try_except_pass] Try, Except, Pass detected.
+   Severity: Low   Confidence: High
+   CWE: CWE-703 (https://cwe.mitre.org/data/definitions/703.html)
+   More Info: https://bandit.readthedocs.io/en/0.0.0/plugins/b110_try_except_pass.html
+   Location: src/tools/generate_report.py:298:4
+297	        latest.symlink_to(out_dir.name)
+298	    except Exception:
+299	        pass
+300	    return out_dir
+
+--------------------------------------------------
+
+Code scanned:
+	Total lines of code: 9892
+	Total lines skipped (#nosec): 0
+	Total potential issues skipped due to specifically being disabled (e.g., #nosec BXXX): 0
+
+Run metrics:
+	Total issues (by severity):
+		Undefined: 0
+		Low: 52
+		Medium: 4
+		High: 0
+	Total issues (by confidence):
+		Undefined: 0
+		Low: 2
+		Medium: 0
+		High: 54
+Files skipped (0):
+
