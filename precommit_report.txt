@@ -1710,7 +1710,7 @@ Test results:
 291	                    logger.info(f"New session response: {data}")
 292	            except Exception:
 293	                pass
-294
+294	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -1721,7 +1721,7 @@ Test results:
 305	                logger.debug(f"DaemonClient closed for {self.base_url}")
 306	        except Exception:
 307	            pass
-308
+308	
 
 --------------------------------------------------
 >> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
@@ -1729,7 +1729,7 @@ Test results:
    CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
    More Info: https://bandit.readthedocs.io/en/0.0.0/blacklists/blacklist_imports.html#b404-import-subprocess
    Location: ./src/chat_ui/startup_manager.py:4:0
-3
+3	
 4	import subprocess
 5	import time
 
@@ -1746,7 +1746,7 @@ Test results:
 116	                text=True,
 117	                timeout=self.max_wait_seconds,
 118	            )
-119
+119	
 
 --------------------------------------------------
 >> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
@@ -1761,7 +1761,7 @@ Test results:
 116	                text=True,
 117	                timeout=self.max_wait_seconds,
 118	            )
-119
+119	
 
 --------------------------------------------------
 >> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
@@ -1771,7 +1771,7 @@ Test results:
    Location: ./src/cli_bridge/commands/daemon_cmd.py:20:0
 19	import signal
 20	import subprocess
-21
+21	
 
 --------------------------------------------------
 >> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
@@ -1787,7 +1787,7 @@ Test results:
 243	            stderr=stderr,
 244	            env=os.environ.copy(),  # Explicit env passthrough (allows AI_APP_CONFIG injection)
 245	        )
-246
+246	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -1798,7 +1798,7 @@ Test results:
 375	            pass
 376	        except Exception:
 377	            pass
-378
+378	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -1809,7 +1809,7 @@ Test results:
 483	                    status_data["daemon_info"] = response.json()
 484	            except Exception:
 485	                pass
-486
+486	
 
 --------------------------------------------------
 >> Issue: [B113:request_without_timeout] Call to requests without timeout
@@ -1855,7 +1855,7 @@ Test results:
 234	                stderr=subprocess.DEVNULL,
 235	                start_new_session=True,  # Detach from parent
 236	            )
-237
+237	
 
 --------------------------------------------------
 >> Issue: [B310:blacklist] Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected.
@@ -1886,7 +1886,7 @@ Test results:
 320	                    pages.extend(ctx.pages)
 321	                except Exception:
 322	                    continue
-323
+323	
 
 --------------------------------------------------
 >> Issue: [B112:try_except_continue] Try, Except, Continue detected.
@@ -1897,7 +1897,7 @@ Test results:
 328	                        return p
 329	                except Exception:
 330	                    continue
-331
+331	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -1909,7 +1909,7 @@ Test results:
 119	        except Exception:
 120	            # Continue anyway; maybe the node is already there
 121	            pass
-122
+122	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -1920,7 +1920,7 @@ Test results:
 138	                text = (await content.inner_text() or "").strip()
 139	        except Exception:
 140	            pass
-141
+141	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -1932,7 +1932,7 @@ Test results:
 117	        except Exception:
 118	            # Continue anyway; maybe the node is already there
 119	            pass
-120
+120	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -1944,7 +1944,7 @@ Test results:
 119	        except Exception:
 120	            # Continue anyway; maybe the node is already there
 121	            pass
-122
+122	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -1955,7 +1955,7 @@ Test results:
 138	                text = (await content.inner_text() or "").strip()
 139	        except Exception:
 140	            pass
-141
+141	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -2033,7 +2033,7 @@ Test results:
 291	                    logger.info(f"New session response: {data}")
 292	            except Exception:
 293	                pass
-294
+294	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -2044,7 +2044,7 @@ Test results:
 305	                logger.debug(f"DaemonClient closed for {self.base_url}")
 306	        except Exception:
 307	            pass
-308
+308	
 
 --------------------------------------------------
 >> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
@@ -2052,7 +2052,7 @@ Test results:
    CWE: CWE-78 (https://cwe.mitre.org/data/definitions/78.html)
    More Info: https://bandit.readthedocs.io/en/0.0.0/blacklists/blacklist_imports.html#b404-import-subprocess
    Location: src/chat_ui/startup_manager.py:4:0
-3
+3	
 4	import subprocess
 5	import time
 
@@ -2069,7 +2069,7 @@ Test results:
 116	                text=True,
 117	                timeout=self.max_wait_seconds,
 118	            )
-119
+119	
 
 --------------------------------------------------
 >> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
@@ -2084,7 +2084,7 @@ Test results:
 116	                text=True,
 117	                timeout=self.max_wait_seconds,
 118	            )
-119
+119	
 
 --------------------------------------------------
 >> Issue: [B404:blacklist] Consider possible security implications associated with the subprocess module.
@@ -2094,7 +2094,7 @@ Test results:
    Location: src/cli_bridge/commands/daemon_cmd.py:20:0
 19	import signal
 20	import subprocess
-21
+21	
 
 --------------------------------------------------
 >> Issue: [B603:subprocess_without_shell_equals_true] subprocess call - check for execution of untrusted input.
@@ -2110,7 +2110,7 @@ Test results:
 243	            stderr=stderr,
 244	            env=os.environ.copy(),  # Explicit env passthrough (allows AI_APP_CONFIG injection)
 245	        )
-246
+246	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -2121,7 +2121,7 @@ Test results:
 375	            pass
 376	        except Exception:
 377	            pass
-378
+378	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -2132,7 +2132,7 @@ Test results:
 483	                    status_data["daemon_info"] = response.json()
 484	            except Exception:
 485	                pass
-486
+486	
 
 --------------------------------------------------
 >> Issue: [B113:request_without_timeout] Call to requests without timeout
@@ -2178,7 +2178,7 @@ Test results:
 234	                stderr=subprocess.DEVNULL,
 235	                start_new_session=True,  # Detach from parent
 236	            )
-237
+237	
 
 --------------------------------------------------
 >> Issue: [B310:blacklist] Audit url open for permitted schemes. Allowing use of file:/ or custom schemes is often unexpected.
@@ -2209,7 +2209,7 @@ Test results:
 320	                    pages.extend(ctx.pages)
 321	                except Exception:
 322	                    continue
-323
+323	
 
 --------------------------------------------------
 >> Issue: [B112:try_except_continue] Try, Except, Continue detected.
@@ -2220,7 +2220,7 @@ Test results:
 328	                        return p
 329	                except Exception:
 330	                    continue
-331
+331	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -2232,7 +2232,7 @@ Test results:
 119	        except Exception:
 120	            # Continue anyway; maybe the node is already there
 121	            pass
-122
+122	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -2243,7 +2243,7 @@ Test results:
 138	                text = (await content.inner_text() or "").strip()
 139	        except Exception:
 140	            pass
-141
+141	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -2255,7 +2255,7 @@ Test results:
 117	        except Exception:
 118	            # Continue anyway; maybe the node is already there
 119	            pass
-120
+120	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -2267,7 +2267,7 @@ Test results:
 119	        except Exception:
 120	            # Continue anyway; maybe the node is already there
 121	            pass
-122
+122	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -2278,7 +2278,7 @@ Test results:
 138	                text = (await content.inner_text() or "").strip()
 139	        except Exception:
 140	            pass
-141
+141	
 
 --------------------------------------------------
 >> Issue: [B110:try_except_pass] Try, Except, Pass detected.
@@ -2366,3 +2366,4 @@ Run metrics:
 		Medium: 0
 		High: 54
 Files skipped (0):
+
