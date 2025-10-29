@@ -143,6 +143,13 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 
+# === Context generation outputs ===
+# Exclude all generated AI context reports and manifests
+/context_reports/
+/**/context_reports/
+/project_reports/
+/**/project_reports/
+
 # =========================================
 # End of file
 # =========================================

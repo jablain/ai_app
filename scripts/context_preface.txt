@@ -1,0 +1,15 @@
+You are an AI assistant. You are receiving a multi-part, plain-text context that
+serves as the single source of truth for this codebase. Use it for navigation,
+analysis, refactoring, bug fixing, packaging, and related development tasks.
+
+Delivery: This context is split into {chunk_count} chunk(s) named chunk_0001.txt …
+up to chunk_{chunk_count:04d}.txt. You are reading chunk 1 of {chunk_count}.
+
+Instructions:
+  1) Use only the information in this context unless explicitly provided more.
+  2) When the last chunk (chunk_{chunk_count:04d}.txt) arrives, wait
+     for further instructions before acting.
+  3) Respect file boundaries marked as:
+         --- BEGIN FILE: <path> ---
+         --- END FILE: <path> ---
+  4) Python files include a one-line outline of imports/classes/functions to speed scanning.

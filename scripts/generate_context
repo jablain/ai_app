@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+set -euo pipefail
+PYTHON_BIN="${PYTHON_BIN:-python3}"
+
+# Get the absolute, canonical path to the directory where this script resides
+SCRIPT_REAL_PATH=$(readlink -f "$0")
+SCRIPT_DIR=$(dirname "$SCRIPT_REAL_PATH")
+
+# IMPORTANT: do NOT cd anywhere; run from the current dir
+# Use $SCRIPT_DIR to build the paths to the preface and suffix files
+exec "$PYTHON_BIN" -m tools.generate_context \
+  --preface-file "$SCRIPT_DIR/context_preface.txt" \
+  --suffix-file "$SCRIPT_DIR/context_suffix.txt" \
+  "$@"
