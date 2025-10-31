@@ -8,58 +8,105 @@ user's request and sending it over HTTP.
 
 import typer
 import requests
-import json as json_lib  # Renamed to avoid conflict with the 'json' parameter
+import json
 
-# Import the daemon config to know where to connect
-from daemon import config as daemon_config
+from ..errors import CLIError, DaemonNotRunning
+from ..constants import API_REQUEST_TIMEOUT_BUFFER_S
 
 
 def run(
+    host: str,
+    port: int,
     ai_name: str,
     message: str,
     wait: bool,
     timeout: int,
-    json: bool,
+    as_json: bool,
     debug: bool,
-    # New parameters to be added in the future
     inject: str | None = None,
     contextsize: int | None = None,
 ) -> int:
     """
     Executes the 'send' command by sending a request to the daemon.
+    
+    Args:
+        host: Daemon host (from config)
+        port: Daemon port (from config)
+        ai_name: Target AI name
+        message: Message to send
+        wait: Whether to wait for response
+        timeout: Operation timeout in seconds
+        as_json: Output as JSON
+        debug: Enable debug output
+        inject: Optional injection parameter
+        contextsize: Optional context size parameter
+    
+    Returns:
+        Exit code (0 for success, non-zero for errors)
     """
+    # Validate AI name
+    ai_name = ai_name.strip()
+    if not ai_name:
+        typer.secho("✗ AI name cannot be empty", fg=typer.colors.RED)
+        return 1
+    if len(ai_name) > 64:
+        typer.secho("✗ AI name too long (max 64 characters)", fg=typer.colors.RED)
+        return 1
+    
     try:
-        # Load daemon configuration to get host and port
-        cfg = daemon_config.load_config()
-        host = cfg.daemon.host
-        port = cfg.daemon.port
         daemon_url = f"http://{host}:{port}/send"
 
-        # Construct the JSON payload for the request
+        # Validate timeout
+        request_timeout = max(timeout + API_REQUEST_TIMEOUT_BUFFER_S, 15)
+
+        # Construct payload
         payload = {
             "target": ai_name,
             "prompt": message,
             "wait_for_response": wait,
             "timeout_s": timeout,
-            # Pass along other relevant options
             "debug": debug,
             "inject": inject,
             "context_size": contextsize,
         }
 
-        # Send the request to the daemon
-        # The timeout for the request should be slightly longer than the operation timeout
-        response = requests.post(daemon_url, json=payload, timeout=timeout + 10)
-        response.raise_for_status()  # Raise an exception for bad status codes (4xx or 5xx)
+        # Send request
+        response = requests.post(daemon_url, json=payload, timeout=request_timeout)
+        response.raise_for_status()
 
-        # Process the response from the daemon
-        response_data = response.json()
+        # Process response - handle non-JSON responses
+        try:
+            response_data = response.json()
+        except json.JSONDecodeError:
+            typer.secho("✗ Invalid response from daemon (not JSON)", fg=typer.colors.RED)
+            typer.echo(f"  Status: {response.status_code}")
+            typer.echo(f"  Body preview: {response.text[:200]}")
+            if debug:
+                typer.echo(f"  Full body: {response.text}")
+            return 1
 
-        if json:
-            # If --json flag is used, print the entire JSON response
-            typer.echo(json_lib.dumps(response_data, indent=2))
+        if as_json:
+            # Uniform JSON envelope
+            success = response_data.get("success", False)
+            metadata = response_data.get("metadata", {})
+            
+            envelope = {
+                "ok": success,
+                "code": 0 if success else 1,
+                "message": "Success" if success else (
+                    metadata.get("error", {}).get("message") if isinstance(metadata.get("error"), dict)
+                    else str(metadata.get("error", "Failed"))
+                ),
+                "data": {
+                    "snippet": response_data.get("snippet"),
+                    "markdown": response_data.get("markdown"),
+                    "elapsed_ms": metadata.get("elapsed_ms"),
+                    "timeout_s": metadata.get("timeout_s"),
+                }
+            }
+            typer.echo(json.dumps(envelope, indent=2))
         else:
-            # Otherwise, provide a human-readable summary
+            # Human-readable output
             if response_data.get("success"):
                 typer.secho("✓ Sent", fg=typer.colors.GREEN)
                 metadata = response_data.get("metadata", {})
@@ -68,34 +115,43 @@ def run(
                 if snippet:
                     typer.echo(f"  elapsed: {metadata.get('elapsed_ms')} ms")
                     typer.echo("  response:")
-                    # CORRECTED LOGIC: Perform the replacement before the f-string
-                    formatted_snippet = snippet.replace("\n", "\n    ")
-                    typer.echo(f"    {formatted_snippet}")
+                    # Fixed formatting: only add indentation once
+                    for line in snippet.splitlines():
+                        typer.echo(f"    {line}")
             else:
-                error_msg = response_data.get("metadata", {}).get("error", "Unknown error")
+                error_data = response_data.get("metadata", {}).get("error", {})
+                if isinstance(error_data, dict):
+                    error_msg = error_data.get("message", "Unknown error")
+                else:
+                    error_msg = str(error_data) if error_data else "Unknown error"
                 typer.secho(f"✗ Error: {error_msg}", fg=typer.colors.RED)
                 return 1
 
+        return 0
+
     except requests.exceptions.ConnectionError:
         typer.secho(
-            "Error: Cannot connect to the AI daemon. Is it running?",
+            "✗ Cannot connect to daemon",
             fg=typer.colors.RED,
         )
-        typer.echo("Please start it with 'ai-cli-bridge daemon start'")
-        return 1
+        typer.echo("  Is it running? Try: aicli daemon start")
+        return DaemonNotRunning.exit_code
+
     except requests.exceptions.HTTPError as e:
         typer.secho(
-            f"Error: Received an error response from the daemon: {e.response.status_code}",
+            f"✗ Daemon error (HTTP {e.response.status_code})",
             fg=typer.colors.RED,
         )
         try:
-            # Try to print the detailed error from the daemon's response
-            typer.echo(e.response.json().get("detail", "No details provided."))
-        except json_lib.JSONDecodeError:
-            typer.echo("Could not parse error details from the daemon response.")
-        return 1
-    except Exception as e:
-        typer.secho(f"An unexpected error occurred: {e}", fg=typer.colors.RED)
+            detail = e.response.json()
+            typer.echo(f"  {detail.get('detail', 'No details provided')}")
+        except Exception:
+            # Daemon returned non-JSON error
+            typer.echo(f"  Response: {e.response.text[:200]}")
         return 1
 
-    return 0
+    except Exception as e:
+        typer.secho(f"✗ Unexpected error: {e}", fg=typer.colors.RED)
+        if debug:
+            raise
+        return 1

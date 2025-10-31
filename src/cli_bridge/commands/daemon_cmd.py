@@ -2,13 +2,8 @@
 Daemon management commands for AI-CLI-Bridge.
 
 This module provides CLI commands to start, stop, and check the status of the
-self-managing AI daemon. The daemon now owns its own lifecycle, PID files, and
-browser process management.
-
-Commands:
-- start: Spawn the daemon process and optionally wait for readiness
-- stop: Send SIGTERM to daemon and wait for graceful shutdown
-- status: Check if daemon is running and healthy
+self-managing AI daemon. The daemon owns its own lifecycle and browser process
+management. The CLI simply manages the daemon process group.
 """
 
 from __future__ import annotations
@@ -18,30 +13,37 @@ import sys
 import time
 import signal
 import subprocess
+import json
 
 import typer
-
-# Early check for requests dependency
-try:
-    import requests
-except ImportError:
-    print(
-        "✗ The 'requests' package is required.\n  Install: pip install requests",
-        file=sys.stderr,
-    )
-    sys.exit(1)
+import requests
 
 from daemon.config import (
     load_config,
-    PID_FILE,
     DAEMON_LOG_FILE,
     EXIT_SUCCESS,
     EXIT_GENERIC_FAILURE,
-    EXIT_PID_LOCK_HELD,
     EXIT_PROFILE_DIR_NOT_WRITABLE,
     EXIT_DAEMON_PORT_BUSY,
     EXIT_FLATPAK_MISSING,
     EXIT_CDP_CONFLICT_OR_TIMEOUT,
+)
+
+# Import error types and constants
+from ..errors import (
+    DaemonNotRunning,
+    DaemonStartupFailed,
+    DaemonShutdownFailed,
+    InvalidConfiguration,
+)
+from ..constants import (
+    DAEMON_READINESS_POLL_INTERVAL_S,
+    DAEMON_READINESS_DEFAULT_TIMEOUT_S,
+    DAEMON_READINESS_TIMEOUT_BUFFER_S,
+    GRACEFUL_SHUTDOWN_TIMEOUT_S,
+    SIGTERM_RETRY_INTERVAL_S,
+    FORCE_KILL_RETRY_WAIT_S,
+    API_HEALTH_CHECK_TIMEOUT_S,
 )
 
 # Create Typer app for daemon subcommands
@@ -53,40 +55,38 @@ app = typer.Typer(help="Manage the AI daemon process.", no_args_is_help=True)
 # ---------------------------------------------------------------------------
 
 
-def get_daemon_pid() -> int | None:
-    """
-    Read daemon PID from PID file.
-
-    Returns None if file doesn't exist or PID is invalid.
-    """
-    if not PID_FILE.exists():
-        return None
-
-    try:
-        pid_str = PID_FILE.read_text().strip()
-        return int(pid_str)
-    except (ValueError, OSError):
-        return None
-
-
 def is_process_alive(pid: int) -> bool:
-    """
-    Check if a process with given PID is alive.
-
-    Uses os.kill(pid, 0) which doesn't actually send a signal,
-    just checks if the process exists.
-    """
+    """Check if a process with given PID is alive."""
     try:
         os.kill(pid, 0)
         return True
     except ProcessLookupError:
         return False
     except PermissionError:
-        # Process exists but we don't own it
         return True
 
 
-def check_daemon_health(host: str, port: int, timeout: float = 1.0) -> tuple[bool, str | None]:
+def get_daemon_pid_from_api(host: str, port: int) -> int | None:
+    """
+    Get daemon PID from /status API endpoint.
+    
+    Returns:
+        Daemon PID if available, None if unreachable or missing.
+    """
+    try:
+        response = requests.get(
+            f"http://{host}:{port}/status",
+            timeout=API_HEALTH_CHECK_TIMEOUT_S,
+        )
+        if response.status_code == 200:
+            data = response.json()
+            return data.get("daemon", {}).get("pid")
+    except Exception:
+        pass
+    return None
+
+
+def check_daemon_health(host: str, port: int, timeout: float = API_HEALTH_CHECK_TIMEOUT_S) -> tuple[bool, str | None]:
     """
     Check daemon health via /healthz endpoint.
 
@@ -96,11 +96,10 @@ def check_daemon_health(host: str, port: int, timeout: float = 1.0) -> tuple[boo
         response = requests.get(f"http://{host}:{port}/healthz", timeout=timeout)
         if response.status_code == 200:
             data = response.json()
-            if data.get("ok"):
+            if str(data.get("status", "")).lower() == "ok":
                 return True, None
-            else:
-                reason = data.get("reason", "unknown")
-                return False, f"Unhealthy: {reason}"
+            reason = data.get("reason", data.get("message", "unknown"))
+            return False, f"Unhealthy: {reason}"
         else:
             return False, f"HTTP {response.status_code}"
     except requests.exceptions.ConnectionError:
@@ -111,53 +110,50 @@ def check_daemon_health(host: str, port: int, timeout: float = 1.0) -> tuple[boo
         return False, str(e)
 
 
-def wait_for_daemon_ready(host: str, port: int, timeout_s: float = 15.0) -> bool:
+def wait_for_daemon_ready(host: str, port: int, timeout_s: float = DAEMON_READINESS_DEFAULT_TIMEOUT_S) -> bool:
     """
     Poll /healthz until daemon is ready or timeout.
+    Uses exponential backoff for efficiency.
 
     Returns True if daemon became healthy, False if timeout.
     """
-    start_time = time.time()
+    end_time = time.time() + timeout_s
+    delay = 0.1  # Start with 100ms
     last_error = None
 
-    while time.time() - start_time < timeout_s:
-        is_healthy, error = check_daemon_health(host, port, timeout=1.0)
+    while time.time() < end_time:
+        is_healthy, error = check_daemon_health(host, port, timeout=API_HEALTH_CHECK_TIMEOUT_S)
         if is_healthy:
             return True
 
         last_error = error
-        time.sleep(0.5)
+        time.sleep(delay)
+        delay = min(delay * 2, DAEMON_READINESS_POLL_INTERVAL_S)  # Cap at 0.5s
 
-    # Timeout
     if last_error:
         typer.echo(f"  Timeout waiting for daemon (last error: {last_error})")
     return False
 
 
-def wait_for_process_death(pid: int, timeout_s: float = 12.0) -> bool:
+def wait_for_process_death(pid: int, timeout_s: float = GRACEFUL_SHUTDOWN_TIMEOUT_S) -> bool:
     """
     Wait for process to die.
 
     Returns True if process died, False if still alive after timeout.
     """
     start_time = time.time()
-
     while time.time() - start_time < timeout_s:
         if not is_process_alive(pid):
             return True
-        time.sleep(0.1)
-
+        time.sleep(SIGTERM_RETRY_INTERVAL_S)
     return False
 
 
 def explain_exit_code(exit_code: int) -> str:
-    """
-    Return human-readable explanation of daemon exit code.
-    """
+    """Return human-readable explanation of daemon exit code."""
     explanations = {
         EXIT_SUCCESS: "Success",
         EXIT_GENERIC_FAILURE: "Generic failure",
-        EXIT_PID_LOCK_HELD: "Daemon already running (PID lock held)",
         EXIT_PROFILE_DIR_NOT_WRITABLE: "Profile directory not writable",
         EXIT_DAEMON_PORT_BUSY: "Daemon port already in use",
         EXIT_FLATPAK_MISSING: "Flatpak or ungoogled-chromium not installed",
@@ -197,91 +193,84 @@ def start_daemon(
     Use --no-wait to return immediately after spawning.
     Use --verbose to see startup logs.
     """
-    # Load config to get daemon host/port
+    # Load config
     try:
         config = load_config()
         host = config.daemon.host
         port = config.daemon.port
     except Exception as e:
         typer.secho(f"✗ Failed to load config: {e}", fg=typer.colors.RED)
-        raise typer.Exit(EXIT_GENERIC_FAILURE)
+        raise typer.Exit(InvalidConfiguration.exit_code)
 
-    # Check if daemon is already running
-    existing_pid = get_daemon_pid()
-    if existing_pid and is_process_alive(existing_pid):
-        typer.secho(f"✓ Daemon already running (PID: {existing_pid})", fg=typer.colors.GREEN)
-
-        # Check health if already running
-        is_healthy, error = check_daemon_health(host, port)
-        if is_healthy:
-            typer.echo(f"  Daemon is healthy on http://{host}:{port}")
+    # Check if already running
+    healthy, _ = check_daemon_health(host, port, timeout=API_HEALTH_CHECK_TIMEOUT_S)
+    if healthy:
+        pid = get_daemon_pid_from_api(host, port)
+        if pid:
+            typer.secho(f"✓ Daemon already running (PID: {pid})", fg=typer.colors.GREEN)
         else:
-            typer.secho(f"  Warning: Daemon may be unhealthy ({error})", fg=typer.colors.YELLOW)
-
+            typer.secho("✓ Daemon already running", fg=typer.colors.GREEN)
+        typer.echo(f"  API: http://{host}:{port}")
         typer.echo(f"  Logs: {DAEMON_LOG_FILE}")
         raise typer.Exit(EXIT_SUCCESS)
 
-    # Spawn daemon process
+    # Spawn daemon
     typer.echo("Starting daemon...")
 
     try:
-        # Prepare spawn arguments
-        if verbose:
-            # Inherit stdout/stderr to show logs
-            stdout = None
-            stderr = None
-        else:
-            # Redirect to /dev/null
-            stdout = subprocess.DEVNULL
-            stderr = subprocess.DEVNULL
+        stdout = None if verbose else subprocess.DEVNULL
+        stderr = None if verbose else subprocess.DEVNULL
 
-        # Spawn daemon in new session (detached)
         process = subprocess.Popen(
             [sys.executable, "-m", "daemon.main"],
             start_new_session=True,
             stdout=stdout,
             stderr=stderr,
-            env=os.environ.copy(),  # Explicit env passthrough (allows AI_APP_CONFIG injection)
+            env=os.environ.copy(),
         )
 
-        # Brief wait to see if it crashes immediately
-        time.sleep(0.5)
+        spawn_pid = process.pid
+        typer.echo(f"  Spawned process (PID: {spawn_pid})")
 
-        # Check if process is still alive
-        if process.poll() is not None:
-            # Process died immediately
-            exit_code = process.returncode
-            typer.secho(
-                f"✗ Daemon failed to start (exit code: {exit_code})",
-                fg=typer.colors.RED,
-            )
-            typer.echo(f"  {explain_exit_code(exit_code)}")
-            typer.echo(f"  Spawn cmd: {sys.executable} -m daemon.main")
-            typer.echo(f"  Check logs: {DAEMON_LOG_FILE}")
-            if not verbose:
-                typer.echo(f"  Tip: re-run with --verbose or tail {DAEMON_LOG_FILE}")
-            raise typer.Exit(exit_code)
-
-        typer.secho(f"✓ Daemon spawned (PID: {process.pid})", fg=typer.colors.GREEN)
-
-        # Show log location if not in verbose mode
         if not verbose:
             typer.echo(f"  Logs: {DAEMON_LOG_FILE}")
 
         # Wait for readiness if requested
         if wait:
             typer.echo("  Waiting for daemon to become ready...")
-            # Derive timeout from config or use override
-            ready_timeout = timeout or max(10.0, float(config.cdp.start_timeout_s) + 5.0)
+            
+            # Safe config access
+            start_cdp = getattr(getattr(config, "cdp", object()), "start_timeout_s", 10.0)
+            ready_timeout = timeout or max(
+                DAEMON_READINESS_DEFAULT_TIMEOUT_S,
+                float(start_cdp) + DAEMON_READINESS_TIMEOUT_BUFFER_S,
+            )
+            
             if wait_for_daemon_ready(host, port, timeout_s=ready_timeout):
-                typer.secho(f"✓ Daemon ready on http://{host}:{port}", fg=typer.colors.GREEN)
+                # Get actual daemon PID from API (may differ from spawn PID in edge cases)
+                pid = get_daemon_pid_from_api(host, port) or spawn_pid
+                typer.secho(f"✓ Daemon ready (PID: {pid})", fg=typer.colors.GREEN)
+                typer.echo(f"  API: http://{host}:{port}")
             else:
-                typer.secho("✗ Daemon did not become ready in time", fg=typer.colors.RED)
+                # Check if process crashed
+                exit_code = process.poll()
+                if exit_code is not None:
+                    typer.secho(
+                        f"✗ Daemon crashed during startup (exit code: {exit_code})",
+                        fg=typer.colors.RED,
+                    )
+                    typer.echo(f"  {explain_exit_code(exit_code)}")
+                else:
+                    typer.secho("✗ Daemon did not become ready in time", fg=typer.colors.RED)
+                    typer.echo("  The daemon process may still be initializing")
+                
                 typer.echo(f"  Check logs: {DAEMON_LOG_FILE}")
-                typer.echo("  The daemon may still be starting up...")
-                raise typer.Exit(EXIT_GENERIC_FAILURE)
+                if not verbose:
+                    typer.echo(f"  Tip: re-run with --verbose")
+                raise typer.Exit(DaemonStartupFailed.exit_code)
         else:
-            typer.echo("  Daemon starting in background (use 'daemon status' to check)")
+            typer.echo("  Daemon starting in background")
+            typer.echo("  Use 'aicli daemon status' to check readiness")
 
     except FileNotFoundError:
         typer.secho("✗ Could not find Python or daemon module", fg=typer.colors.RED)
@@ -301,11 +290,8 @@ def stop_daemon(
     """
     Stop the running AI daemon.
 
-    Sends SIGTERM to trigger graceful shutdown. The daemon will:
-    - Cancel health monitoring
-    - Close browser connections
-    - Kill browser process group
-    - Clean up PID files
+    Sends SIGTERM to the daemon process group for graceful shutdown.
+    The daemon will clean up all child processes (browser, helpers, etc).
 
     Use --force to send SIGKILL if graceful shutdown times out.
     """
@@ -316,115 +302,82 @@ def stop_daemon(
         port = config.daemon.port
     except Exception as e:
         typer.secho(f"✗ Failed to load config: {e}", fg=typer.colors.RED)
-        raise typer.Exit(EXIT_GENERIC_FAILURE)
+        raise typer.Exit(InvalidConfiguration.exit_code)
 
-    # Get daemon PID
-    pid = get_daemon_pid()
+    # Get daemon PID from API
+    pid = get_daemon_pid_from_api(host, port)
     if not pid:
-        typer.secho("✗ Daemon not running (no PID file)", fg=typer.colors.RED)
-        raise typer.Exit(1)
+        typer.secho("✗ Daemon not running", fg=typer.colors.YELLOW)
+        raise typer.Exit(DaemonNotRunning.exit_code)
 
-    # Check if process is alive
-    if not is_process_alive(pid):
-        typer.secho(f"✗ Daemon not running (PID {pid} not found)", fg=typer.colors.RED)
-        typer.echo("  Cleaning up stale PID file...")
-        PID_FILE.unlink(missing_ok=True)
-        raise typer.Exit(1)
-
-    # Optional: Verify it's our daemon by checking health
-    is_healthy, _ = check_daemon_health(host, port, timeout=1.0)
-    if not is_healthy and not force:
-        typer.secho(
-            f"⚠ Warning: Process {pid} exists but daemon API not responding",
-            fg=typer.colors.YELLOW,
-        )
-        typer.echo("  This may not be the daemon process.")
-        if not typer.confirm("  Continue anyway?"):
-            # Do NOT unlink PID file here - process may still be alive
-            raise typer.Exit(1)
-
-    # Send SIGTERM
-    typer.echo(f"Stopping daemon (PID: {pid})...")
+    # Send SIGTERM to process group
+    typer.echo(f"Stopping daemon (PID: {pid})…")
     try:
-        os.kill(pid, signal.SIGTERM)
+        # Kill the entire process group (includes browser and all children)
+        pgid = os.getpgid(pid)
+        os.killpg(pgid, signal.SIGTERM)
     except ProcessLookupError:
-        typer.secho("✗ Process already stopped", fg=typer.colors.YELLOW)
-        PID_FILE.unlink(missing_ok=True)
+        typer.secho("✓ Daemon already stopped", fg=typer.colors.GREEN)
         raise typer.Exit(EXIT_SUCCESS)
     except PermissionError:
         typer.secho(f"✗ Permission denied (cannot kill PID {pid})", fg=typer.colors.RED)
         raise typer.Exit(EXIT_GENERIC_FAILURE)
-
-    typer.echo("  Sent SIGTERM, waiting for graceful shutdown...")
-
-    # Wait for process to die (daemon has 10s grace + 2s buffer)
-    if wait_for_process_death(pid, timeout_s=12.0):
-        typer.secho("✓ Daemon stopped gracefully", fg=typer.colors.GREEN)
-
-        # Verify CDP port is closed
-        time.sleep(0.5)
-        cdp_port = config.cdp.port
+    except Exception:
+        # Fallback to single process kill if process group fails
         try:
-            _ = requests.get(
-                f"http://127.0.0.1:{cdp_port}/json/version", timeout=1.0
-            )  # Check if CDP responding
-            typer.secho(
-                f"  Warning: CDP still responding on port {cdp_port}",
-                fg=typer.colors.YELLOW,
-            )
-        except requests.exceptions.ConnectionError:
-            # Good - CDP is dead
-            pass
-        except Exception:
-            pass
+            os.kill(pid, signal.SIGTERM)
+        except ProcessLookupError:
+            typer.secho("✓ Daemon already stopped", fg=typer.colors.GREEN)
+            raise typer.Exit(EXIT_SUCCESS)
 
-        # Verify PID file is cleaned up
-        if PID_FILE.exists():
-            typer.secho("  Warning: PID file still exists", fg=typer.colors.YELLOW)
+    typer.echo("  Sent SIGTERM, waiting for graceful shutdown…")
 
+    # Wait for process to die
+    if wait_for_process_death(pid, timeout_s=GRACEFUL_SHUTDOWN_TIMEOUT_S):
+        typer.secho("✓ Daemon stopped gracefully", fg=typer.colors.GREEN)
         raise typer.Exit(EXIT_SUCCESS)
 
     # Timeout - process still alive
-    typer.secho("⚠ Daemon did not stop gracefully within 12s", fg=typer.colors.YELLOW)
+    typer.secho("⚠ Daemon did not stop gracefully", fg=typer.colors.YELLOW)
 
     if force:
-        typer.echo("  Sending SIGKILL (force)...")
+        typer.echo("  Sending SIGKILL (force)…")
         try:
-            os.kill(pid, signal.SIGKILL)
-            time.sleep(1.0)
+            try:
+                pgid = os.getpgid(pid)
+                os.killpg(pgid, signal.SIGKILL)
+            except Exception:
+                os.kill(pid, signal.SIGKILL)
+            
+            time.sleep(FORCE_KILL_RETRY_WAIT_S)
 
             if is_process_alive(pid):
                 typer.secho("✗ Failed to kill daemon", fg=typer.colors.RED)
-                raise typer.Exit(EXIT_GENERIC_FAILURE)
+                raise typer.Exit(DaemonShutdownFailed.exit_code)
             else:
                 typer.secho("✓ Daemon killed (forced)", fg=typer.colors.GREEN)
-                PID_FILE.unlink(missing_ok=True)
                 raise typer.Exit(EXIT_SUCCESS)
         except Exception as e:
             typer.secho(f"✗ Failed to force kill: {e}", fg=typer.colors.RED)
             raise typer.Exit(EXIT_GENERIC_FAILURE)
     else:
         typer.echo("  Daemon still running. Use --force to send SIGKILL")
-        raise typer.Exit(EXIT_GENERIC_FAILURE)
+        raise typer.Exit(DaemonShutdownFailed.exit_code)
 
 
 @app.command("status")
 def daemon_status(
-    verbose: bool = typer.Option(False, "--verbose", help="Show detailed daemon status"),
     json_output: bool = typer.Option(False, "--json", help="Output status as JSON"),
 ):
     """
-    Check the status of the AI daemon.
-
-    Shows:
-    - Whether daemon process is running
-    - Health status (/healthz)
-    - Available AIs and uptime (if --verbose)
+    Check the health of the AI daemon process.
+    
+    Shows daemon process status only (running, PID, health).
+    For detailed AI instance status, use 'aicli status'.
 
     Exit codes:
       0 = Daemon running and healthy
       1 = Daemon not running
-      2 = Daemon running but unhealthy
     """
     # Load config
     try:
@@ -435,112 +388,52 @@ def daemon_status(
         typer.secho(f"✗ Failed to load config: {e}", fg=typer.colors.RED)
         raise typer.Exit(EXIT_GENERIC_FAILURE)
 
-    # Check PID file
-    pid = get_daemon_pid()
-    if not pid:
+    # Check health
+    is_healthy, error = check_daemon_health(host, port, timeout=API_HEALTH_CHECK_TIMEOUT_S)
+    
+    if not is_healthy:
         if json_output:
-            import json
+            envelope = {
+                "ok": False,
+                "code": 1,
+                "message": error or "Daemon not running",
+                "data": {
+                    "running": False,
+                    "pid": None,
+                    "api_url": f"http://{host}:{port}"
+                }
+            }
+            typer.echo(json.dumps(envelope, indent=2))
+        else:
+            typer.secho("Daemon status: 🛑 Not Running", fg=typer.colors.RED)
+            if error:
+                typer.echo(f"  Error: {error}")
+            typer.echo("  Start with: aicli daemon start")
+        raise typer.Exit(DaemonNotRunning.exit_code)
 
-            typer.echo(json.dumps({"running": False, "reason": "No PID file"}))
-            raise typer.Exit(1)
-
-        typer.secho("Daemon status: 🛑 Not Running", fg=typer.colors.RED)
-        typer.echo("  No PID file found")
-        typer.echo("  Start the daemon with your CLI's 'daemon start' command.")
-        raise typer.Exit(1)
-
-    # Check if process is alive
-    if not is_process_alive(pid):
-        if json_output:
-            import json
-
-            typer.echo(json.dumps({"running": False, "pid": pid, "reason": "Stale PID file"}))
-            raise typer.Exit(1)
-
-        typer.secho("Daemon status: 🛑 Not Running", fg=typer.colors.RED)
-        typer.echo(f"  PID {pid} not found (stale PID file)")
-        typer.echo("  Start the daemon with your CLI's 'daemon start' command.")
-        raise typer.Exit(1)
-
-    # Process is alive, check health
-    is_healthy, error = check_daemon_health(host, port, timeout=2.0)
-
-    # JSON output mode
+    # Healthy: Get PID
+    pid = get_daemon_pid_from_api(host, port)
+    
     if json_output:
-        import json
-
-        status_data = {
-            "running": True,
-            "pid": pid,
-            "healthy": is_healthy,
-            "error": error,
-            "api_url": f"http://{host}:{port}",
+        envelope = {
+            "ok": True,
+            "code": 0,
+            "message": "Daemon running and healthy",
+            "data": {
+                "running": True,
+                "pid": pid,
+                "api_url": f"http://{host}:{port}"
+            }
         }
-
-        # Add detailed info if healthy
-        if is_healthy:
-            try:
-                response = requests.get(f"http://{host}:{port}/status", timeout=3.0)
-                if response.status_code == 200:
-                    status_data["daemon_info"] = response.json()
-            except Exception:
-                pass
-
-        typer.echo(json.dumps(status_data, indent=2))
-        raise typer.Exit(0 if is_healthy else 2)
-
-    # Human-readable output
-    typer.secho(f"Daemon status: ✅ Running (PID: {pid})", fg=typer.colors.GREEN)
-
-    if is_healthy:
+        typer.echo(json.dumps(envelope, indent=2))
+    else:
+        typer.secho(f"Daemon status: ✅ Running (PID: {pid or 'unknown'})", fg=typer.colors.GREEN)
         typer.secho("  Health: ✅ OK", fg=typer.colors.GREEN)
         typer.echo(f"  API: http://{host}:{port}")
+        typer.echo("")
+        typer.echo("  (Use 'aicli status' for AI instance details)")
 
-        # Get detailed status if verbose
-        if verbose:
-            try:
-                response = requests.get(f"http://{host}:{port}/status", timeout=3.0)
-                if response.status_code == 200:
-                    data = response.json()
-                    daemon_info = data.get("daemon", {})
-                    ais = data.get("ais", {})
-
-                    typer.echo("")
-                    typer.echo("Daemon Info:")
-                    typer.echo(f"  Version: {daemon_info.get('version', 'unknown')}")
-                    typer.echo(f"  Uptime: {daemon_info.get('uptime_s', 0):.1f}s")
-                    typer.echo(
-                        f"  Browser Pool: {'active' if daemon_info.get('browser_pool_active') else 'inactive'}"
-                    )
-                    typer.echo(
-                        f"  CDP Health: {'OK' if daemon_info.get('cdp_healthy') else 'unhealthy'}"
-                    )
-
-                    available = daemon_info.get("available_ais", [])
-                    if available:
-                        typer.echo(f"  Available AIs: {', '.join(available)}")
-
-                    typer.echo("")
-                    typer.echo(f"AI Instances ({len(ais)}):")
-                    for ai_name, ai_data in ais.items():
-                        connected = "✓" if ai_data.get("connected") else "✗"
-                        transport = ai_data.get("transport_type", "unknown")
-                        typer.echo(f"  {connected} {ai_name} ({transport})")
-
-            except Exception as e:
-                typer.secho(
-                    f"  Warning: Could not fetch detailed status: {e}",
-                    fg=typer.colors.YELLOW,
-                )
-
-        raise typer.Exit(EXIT_SUCCESS)
-
-    else:
-        # Daemon running but unhealthy
-        typer.secho(f"  Health: ⚠ Unhealthy ({error})", fg=typer.colors.YELLOW)
-        typer.echo(f"  Check logs: {DAEMON_LOG_FILE}")
-        typer.echo(f"  Tip: tail {DAEMON_LOG_FILE} to diagnose startup health.")
-        raise typer.Exit(2)
+    raise typer.Exit(EXIT_SUCCESS)
 
 
 # ---------------------------------------------------------------------------

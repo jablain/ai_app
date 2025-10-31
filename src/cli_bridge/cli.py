@@ -19,21 +19,44 @@ from .commands import daemon_cmd
 from .commands.status_cmd import run as status_run
 from .commands.send_cmd import run as send_run
 
+# Import config and errors for dependency injection
+from daemon.config import load_config
+from .errors import InvalidConfiguration
+
 # Create root CLI app
 app = typer.Typer(
     add_completion=False,
     help=(
-        "ai-cli-bridge — Drive logged-in AI web UIs via CDP.\n\n"
+        "aicli — Drive logged-in AI web UIs via CDP.\n\n"
         "Examples:\n"
-        "  ai-cli-bridge daemon start\n"
-        "  ai-cli-bridge send claude 'hello'\n"
-        "  ai-cli-bridge status --json\n"
+        "  aicli-bridge daemon start\n"
+        "  aicli-bridge send claude 'hello'\n"
+        "  aicli-bridge status --json\n"
     ),
     no_args_is_help=True,
 )
 
 # Wire in daemon command group (start, stop, status)
 app.add_typer(daemon_cmd.app, name="daemon")
+
+
+# ---------------------------------------------------------------------------
+# Config Helper (Dependency Injection)
+# ---------------------------------------------------------------------------
+
+
+def _get_daemon_conn() -> tuple[str, int]:
+    """
+    Load daemon config and return (host, port).
+    
+    Centralizes config loading for all commands that need to connect to daemon.
+    """
+    try:
+        cfg = load_config()
+        return cfg.daemon.host, cfg.daemon.port
+    except Exception as e:
+        typer.secho(f"✗ Failed to load daemon config: {e}", fg=typer.colors.RED)
+        raise typer.Exit(InvalidConfiguration.exit_code)
 
 
 # ---------------------------------------------------------------------------
@@ -66,6 +89,16 @@ def send(
         "--debug",
         help="Enable debug output.",
     ),
+    inject: str | None = typer.Option(
+        None,
+        "--inject",
+        help="Inject additional context into the conversation.",
+    ),
+    contextsize: int | None = typer.Option(
+        None,
+        "--context-size",
+        help="Override context window size.",
+    ),
 ):
     """
     Send a message to the current conversation.
@@ -77,8 +110,10 @@ def send(
         ai-cli-bridge send claude "What is the weather?"
         ai-cli-bridge send gemini --no-wait "Summarize this article"
         ai-cli-bridge send chatgpt --json "Translate to French: Hello"
+        ai-cli-bridge send claude --inject "You are a pirate" "Tell me a story"
     """
-    raise typer.Exit(send_run(ai_name, message, wait, timeout, as_json, debug))
+    host, port = _get_daemon_conn()
+    raise typer.Exit(send_run(host, port, ai_name, message, wait, timeout, as_json, debug, inject, contextsize))
 
 
 # ---------------------------------------------------------------------------
@@ -104,7 +139,8 @@ def status(
         ai-cli-bridge status claude
         ai-cli-bridge status gemini --json
     """
-    raise typer.Exit(status_run(ai_name, as_json))
+    host, port = _get_daemon_conn()
+    raise typer.Exit(status_run(host, port, ai_name, as_json))
 
 
 # ---------------------------------------------------------------------------

@@ -265,6 +265,8 @@ async def status():
     """
     Get daemon and AI instance status.
     """
+    import os  # Add at top of function
+    
     browser_pool = daemon_state["browser_pool"]
     ai_instances = daemon_state["ai_instances"]
     health_monitor = daemon_state["health_monitor"]
@@ -273,6 +275,7 @@ async def status():
     uptime = time.time() - daemon_state["startup_time"] if daemon_state["startup_time"] else 0
     daemon_status = {
         "version": VERSION,
+        "pid": os.getpid(),  # ← ADD THIS LINE
         "browser_pool_active": browser_pool is not None,
         "cdp_healthy": health_monitor.is_healthy() if health_monitor else False,
         "uptime_s": uptime,
@@ -294,7 +297,6 @@ async def status():
         daemon=daemon_status,
         ais=ai_statuses,
     )
-
 
 @app.post("/send", response_model=SendResponse)
 async def send(request: SendRequest):
