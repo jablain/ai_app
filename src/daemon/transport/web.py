@@ -12,11 +12,86 @@ from typing import Any
 
 from playwright.async_api import Page, TimeoutError as PWTimeout
 
-from .base import ITransport, TransportKind, SendResult
+from .base import ITransport, TransportKind, SendResult, ErrorCategory, ErrorCode, TransportError
 
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+
+def _create_error(
+    category: ErrorCategory,
+    code: ErrorCode,
+    message: str,
+    user_action: str | None = None,
+    recoverable: bool = True,
+    **transport_details
+) -> dict[str, Any]:
+    """
+    Helper to create standardized error response.
+    
+    Args:
+        category: Error category
+        code: Standardized error code
+        message: User-friendly message
+        user_action: Optional suggested action
+        recoverable: Whether retry might work
+        **transport_details: Transport-specific debug info
+    
+    Returns:
+        Error dict for metadata
+    """
+    error = TransportError(
+        category=category,
+        code=code,
+        message=message,
+        user_action=user_action,
+        recoverable=recoverable,
+        transport_details=transport_details if transport_details else None
+    )
+    return error.to_dict()
+
+
+def _create_metadata(
+    start_ts: float,
+    timeout_s: float,
+    ws_url: str | None = None,
+    ws_source: str = "none",
+    error: dict | None = None,
+    **extra
+) -> dict[str, Any]:
+    """
+    Helper to create consistent metadata structure.
+    
+    Args:
+        start_ts: Operation start timestamp
+        timeout_s: Configured timeout
+        ws_url: CDP WebSocket URL (if available)
+        ws_source: CDP origin
+        error: Error dict from _create_error
+        **extra: Additional metadata fields
+    
+    Returns:
+        Metadata dict
+    """
+    meta = {
+        "transport": "web",
+        "start_ts": start_ts,
+        "timeout_s": timeout_s,
+        "duration_s": round(time.time() - start_ts, 3),
+        "timestamp": datetime.utcnow().isoformat() + "Z",
+    }
+    
+    if ws_url:
+        meta["cdp_url"] = ws_url
+    if ws_source:
+        meta["cdp_origin"] = ws_source
+    if error:
+        meta["error"] = error
+    
+    meta.update(extra)
+    return meta
 
 
 class WebTransport(ITransport):

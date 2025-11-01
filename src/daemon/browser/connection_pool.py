@@ -150,15 +150,26 @@ class BrowserConnectionPool:
             # Terminate browser process if we launched it
             if self._browser_process:
                 try:
-                    logger.info("Terminating launched browser process...")
-                    self._browser_process.terminate()
+                    logger.info("Terminating launched browser process and children...")
+                    # Get the process group ID (since we used start_new_session=True)
+                    import os
+                    import signal
+                    pgid = os.getpgid(self._browser_process.pid)
+                    logger.debug(f"Killing process group {pgid}")
+                    
+                    # Kill the entire process group (parent + all children)
                     try:
+                        os.killpg(pgid, signal.SIGTERM)
+                        # Wait for graceful shutdown
                         self._browser_process.wait(timeout=5)
+                        logger.info("Browser process group terminated gracefully")
                     except subprocess.TimeoutExpired:
-                        logger.warning("Browser didn't terminate gracefully, killing...")
-                        self._browser_process.kill()
+                        logger.warning("Browser didn't terminate gracefully, force killing...")
+                        os.killpg(pgid, signal.SIGKILL)
                         self._browser_process.wait()
-                    logger.info("Browser process terminated")
+                        logger.info("Browser process group killed")
+                except ProcessLookupError:
+                    logger.debug("Browser process already gone")
                 except Exception as e:
                     logger.warning(f"Error terminating browser process: {e}")
                 finally:

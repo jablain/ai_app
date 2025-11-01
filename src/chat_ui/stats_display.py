@@ -7,7 +7,7 @@ gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk
 from typing import Any
 
-from ai_chat_ui import stats_helper
+from chat_ui import stats_helper
 
 
 class StatsDisplay(Gtk.Box):

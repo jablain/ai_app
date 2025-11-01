@@ -4,8 +4,8 @@ __version__ = "2.0.0"
 
 # Defensive imports for setup/documentation contexts
 try:
-    from ai_chat_ui.daemon_client import DaemonClient
-    from ai_chat_ui.main import main
+    from chat_ui.cli_wrapper import CLIWrapper as DaemonClient
+    from chat_ui.main import main
 except ImportError:
     DaemonClient = None
     main = None

@@ -8,7 +8,7 @@ gi.require_version("Gdk", "4.0")
 from gi.repository import Gtk, Gdk, GLib
 import logging
 
-from ai_chat_ui.markdown_parser import MarkdownParser
+from chat_ui.markdown_parser import MarkdownParser
 
 logger = logging.getLogger(__name__)
 

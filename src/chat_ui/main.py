@@ -9,9 +9,9 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk, Gio
 
-from ai_chat_ui.daemon_client import DaemonClient
-from ai_chat_ui.startup_manager import StartupManager
-from ai_chat_ui.window import ChatWindow
+from chat_ui.cli_wrapper import CLIWrapper
+from chat_ui.startup_manager import StartupManager
+from chat_ui.window import ChatWindow
 
 # Application ID (reverse-DNS format)
 APP_ID = "ai.app.chat_ui"
@@ -29,8 +29,8 @@ def main():
     logger.info("Starting AI Chat UI v2.0.0")
 
     # Create daemon client
-    daemon_client = DaemonClient()
-    logger.debug(f"DaemonClient initialized for {daemon_client.base_url}")
+    daemon_client = CLIWrapper()
+    logger.debug("CLIWrapper initialized")
 
     # Ensure daemon is running (blocks until ready or fails)
     startup_manager = StartupManager(daemon_client)

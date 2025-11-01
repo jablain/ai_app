@@ -22,6 +22,98 @@ class TransportKind(str, Enum):
     MOCK = "mock"  # Test-only or local fake
 
 
+class ErrorCategory(str, Enum):
+    """High-level error categories (transport-agnostic)."""
+    
+    CONNECTION = "connection"      # Cannot reach service
+    AUTHENTICATION = "auth"        # Login/credentials issue
+    TIMEOUT = "timeout"            # Operation took too long
+    RATE_LIMIT = "rate_limit"      # Too many requests
+    SERVICE = "service"            # Provider-side error
+    INPUT = "input"                # Invalid request
+    RESPONSE = "response"          # Bad/empty response
+    UNEXPECTED = "unexpected"      # Unknown error
+
+
+class ErrorCode(str, Enum):
+    """
+    Standardized error codes (transport-agnostic).
+    
+    All transports should map their specific errors to these codes.
+    """
+    
+    # Connection errors
+    CONNECTION_UNAVAILABLE = "connection_unavailable"
+    CONNECTION_LOST = "connection_lost"
+    
+    # Authentication errors
+    SESSION_INVALID = "session_invalid"
+    AUTH_REQUIRED = "auth_required"
+    AUTH_FAILED = "auth_failed"
+    
+    # Timeout errors
+    RESPONSE_TIMEOUT = "response_timeout"
+    OPERATION_TIMEOUT = "operation_timeout"
+    
+    # Rate limiting
+    RATE_LIMITED = "rate_limited"
+    QUOTA_EXCEEDED = "quota_exceeded"
+    
+    # Service errors
+    SERVICE_UNAVAILABLE = "service_unavailable"
+    SERVICE_ERROR = "service_error"
+    
+    # Input/validation
+    INVALID_INPUT = "invalid_input"
+    MESSAGE_TOO_LONG = "message_too_long"
+    
+    # Response issues
+    EMPTY_RESPONSE = "empty_response"
+    MALFORMED_RESPONSE = "malformed_response"
+    
+    # Interaction failures
+    SEND_FAILED = "send_failed"
+    
+    # Catch-all
+    UNEXPECTED = "unexpected"
+
+
+@dataclass(frozen=True)
+class TransportError:
+    """
+    Structured error information (transport-agnostic).
+    
+    Attributes:
+        category: High-level error category
+        code: Specific standardized error code
+        message: User-friendly error message
+        user_action: Suggested action for the user (optional)
+        recoverable: Whether retry might succeed
+        transport_details: Transport-specific debug info (not shown to user)
+    """
+    
+    category: ErrorCategory
+    code: ErrorCode
+    message: str
+    user_action: str | None = None
+    recoverable: bool = True
+    transport_details: dict[str, Any] | None = None
+    
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to JSON-safe dict for metadata."""
+        result = {
+            "category": self.category.value,
+            "code": self.code.value,
+            "message": self.message,
+            "recoverable": self.recoverable,
+        }
+        if self.user_action:
+            result["user_action"] = self.user_action
+        if self.transport_details:
+            result["transport_details"] = self.transport_details
+        return result
+
+
 @dataclass(frozen=True)
 class SendMetadata:
     """
@@ -80,6 +172,7 @@ class ITransport(ABC):
             - snippet: short preview of the response (or None)
             - markdown: full response in markdown/plain text (or None)
             - metadata: JSON-safe dict (timings, ids, debug info)
+                - On error: metadata["error"] should be a TransportError.to_dict()
         """
         raise NotImplementedError
 

@@ -9,10 +9,10 @@ import gi
 gi.require_version("Gtk", "4.0")
 from gi.repository import Gtk, GLib
 
-from ai_chat_ui.daemon_client import DaemonClient, SendResponse
-from ai_chat_ui.response_display import ResponseDisplay
-from ai_chat_ui.stats_display import StatsDisplay
-from ai_chat_ui import stats_helper
+from chat_ui.cli_wrapper import CLIWrapper, SendResponse
+from chat_ui.response_display import ResponseDisplay
+from chat_ui.stats_display import StatsDisplay
+from chat_ui import stats_helper
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 class ChatWindow(Gtk.ApplicationWindow):
     """Main application window for AI Chat"""
 
-    def __init__(self, application, daemon_client: DaemonClient):
+    def __init__(self, application, daemon_client: CLIWrapper):
         super().__init__(application=application)
         self.daemon_client = daemon_client
         self.current_ai = "claude"  # Default AI
@@ -399,9 +399,28 @@ class ChatWindow(Gtk.ApplicationWindow):
         return False  # Don't repeat this idle callback
 
     def do_close_request(self):
-        """Handle window close - do NOT stop daemon"""
+        """Handle window close - stop daemon and CDP"""
         # Stop periodic refresh
         self._stop_periodic_refresh()
-
-        logger.info("Window closing, daemon continues running")
+        
+        logger.info("Window closing, stopping daemon and CDP...")
+        
+        # Stop the daemon (which should also stop CDP)
+        try:
+            import subprocess
+            result = subprocess.run(
+                ["ai-cli-bridge", "daemon", "stop"],
+                capture_output=True,
+                text=True,
+                timeout=10
+            )
+            if result.returncode == 0:
+                logger.info("✓ Daemon stopped successfully")
+            else:
+                logger.warning(f"Daemon stop returned non-zero: {result.stderr}")
+        except subprocess.TimeoutExpired:
+            logger.error("Daemon stop timed out after 10 seconds")
+        except Exception as e:
+            logger.error(f"Failed to stop daemon: {e}")
+        
         return False  # Allow close
