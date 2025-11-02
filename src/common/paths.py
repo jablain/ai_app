@@ -1,6 +1,7 @@
 from __future__ import annotations
-from pathlib import Path
+
 import os
+from pathlib import Path
 
 APP_ID = "ai-app"  # keep stable; use the distribution name
 

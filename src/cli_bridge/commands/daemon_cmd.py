@@ -8,42 +8,43 @@ management. The CLI simply manages the daemon process group.
 
 from __future__ import annotations
 
+import json
 import os
-import sys
-import time
 import signal
 import subprocess
-import json
+import sys
+import time
 
-import typer
 import requests
+import typer
 
 from daemon.config import (
-    load_config,
     DAEMON_LOG_FILE,
-    EXIT_SUCCESS,
-    EXIT_GENERIC_FAILURE,
-    EXIT_PROFILE_DIR_NOT_WRITABLE,
+    EXIT_CDP_CONFLICT_OR_TIMEOUT,
     EXIT_DAEMON_PORT_BUSY,
     EXIT_FLATPAK_MISSING,
-    EXIT_CDP_CONFLICT_OR_TIMEOUT,
+    EXIT_GENERIC_FAILURE,
+    EXIT_PROFILE_DIR_NOT_WRITABLE,
+    EXIT_SUCCESS,
+    load_config,
+)
+
+from ..constants import (
+    API_HEALTH_CHECK_TIMEOUT_S,
+    DAEMON_READINESS_DEFAULT_TIMEOUT_S,
+    DAEMON_READINESS_POLL_INTERVAL_S,
+    DAEMON_READINESS_TIMEOUT_BUFFER_S,
+    FORCE_KILL_RETRY_WAIT_S,
+    GRACEFUL_SHUTDOWN_TIMEOUT_S,
+    SIGTERM_RETRY_INTERVAL_S,
 )
 
 # Import error types and constants
 from ..errors import (
     DaemonNotRunning,
-    DaemonStartupFailed,
     DaemonShutdownFailed,
+    DaemonStartupFailed,
     InvalidConfiguration,
-)
-from ..constants import (
-    DAEMON_READINESS_POLL_INTERVAL_S,
-    DAEMON_READINESS_DEFAULT_TIMEOUT_S,
-    DAEMON_READINESS_TIMEOUT_BUFFER_S,
-    GRACEFUL_SHUTDOWN_TIMEOUT_S,
-    SIGTERM_RETRY_INTERVAL_S,
-    FORCE_KILL_RETRY_WAIT_S,
-    API_HEALTH_CHECK_TIMEOUT_S,
 )
 
 # Create Typer app for daemon subcommands
@@ -69,7 +70,7 @@ def is_process_alive(pid: int) -> bool:
 def get_daemon_pid_from_api(host: str, port: int) -> int | None:
     """
     Get daemon PID from /status API endpoint.
-    
+
     Returns:
         Daemon PID if available, None if unreachable or missing.
     """
@@ -86,7 +87,9 @@ def get_daemon_pid_from_api(host: str, port: int) -> int | None:
     return None
 
 
-def check_daemon_health(host: str, port: int, timeout: float = API_HEALTH_CHECK_TIMEOUT_S) -> tuple[bool, str | None]:
+def check_daemon_health(
+    host: str, port: int, timeout: float = API_HEALTH_CHECK_TIMEOUT_S
+) -> tuple[bool, str | None]:
     """
     Check daemon health via /healthz endpoint.
 
@@ -110,7 +113,9 @@ def check_daemon_health(host: str, port: int, timeout: float = API_HEALTH_CHECK_
         return False, str(e)
 
 
-def wait_for_daemon_ready(host: str, port: int, timeout_s: float = DAEMON_READINESS_DEFAULT_TIMEOUT_S) -> bool:
+def wait_for_daemon_ready(
+    host: str, port: int, timeout_s: float = DAEMON_READINESS_DEFAULT_TIMEOUT_S
+) -> bool:
     """
     Poll /healthz until daemon is ready or timeout.
     Uses exponential backoff for efficiency.
@@ -238,14 +243,14 @@ def start_daemon(
         # Wait for readiness if requested
         if wait:
             typer.echo("  Waiting for daemon to become ready...")
-            
+
             # Safe config access
             start_cdp = getattr(getattr(config, "cdp", object()), "start_timeout_s", 10.0)
             ready_timeout = timeout or max(
                 DAEMON_READINESS_DEFAULT_TIMEOUT_S,
                 float(start_cdp) + DAEMON_READINESS_TIMEOUT_BUFFER_S,
             )
-            
+
             if wait_for_daemon_ready(host, port, timeout_s=ready_timeout):
                 # Get actual daemon PID from API (may differ from spawn PID in edge cases)
                 pid = get_daemon_pid_from_api(host, port) or spawn_pid
@@ -263,10 +268,10 @@ def start_daemon(
                 else:
                     typer.secho("✗ Daemon did not become ready in time", fg=typer.colors.RED)
                     typer.echo("  The daemon process may still be initializing")
-                
+
                 typer.echo(f"  Check logs: {DAEMON_LOG_FILE}")
                 if not verbose:
-                    typer.echo(f"  Tip: re-run with --verbose")
+                    typer.echo("  Tip: re-run with --verbose")
                 raise typer.Exit(DaemonStartupFailed.exit_code)
         else:
             typer.echo("  Daemon starting in background")
@@ -313,22 +318,20 @@ def stop_daemon(
     # Send SIGTERM to process group
     typer.echo(f"Stopping daemon (PID: {pid})…")
     try:
-        # Kill the entire process group (includes browser and all children)
-        pgid = os.getpgid(pid)
-        os.killpg(pgid, signal.SIGTERM)
+        # We ONLY kill the daemon pid and trust it to clean up its own children.
+        # Killing the process group (os.killpg) races with the daemon's
+        # own shutdown handler, causing a SIGKILL and the "Restore" popup.
+        os.kill(pid, signal.SIGTERM)
     except ProcessLookupError:
         typer.secho("✓ Daemon already stopped", fg=typer.colors.GREEN)
         raise typer.Exit(EXIT_SUCCESS)
     except PermissionError:
         typer.secho(f"✗ Permission denied (cannot kill PID {pid})", fg=typer.colors.RED)
         raise typer.Exit(EXIT_GENERIC_FAILURE)
-    except Exception:
-        # Fallback to single process kill if process group fails
-        try:
-            os.kill(pid, signal.SIGTERM)
-        except ProcessLookupError:
-            typer.secho("✓ Daemon already stopped", fg=typer.colors.GREEN)
-            raise typer.Exit(EXIT_SUCCESS)
+    except Exception as e:
+        # This will catch other errors, but we still want to log the attempt
+        typer.echo(f"  Encountered error ({e}), proceeding to wait...")
+        pass
 
     typer.echo("  Sent SIGTERM, waiting for graceful shutdown…")
 
@@ -343,12 +346,8 @@ def stop_daemon(
     if force:
         typer.echo("  Sending SIGKILL (force)…")
         try:
-            try:
-                pgid = os.getpgid(pid)
-                os.killpg(pgid, signal.SIGKILL)
-            except Exception:
-                os.kill(pid, signal.SIGKILL)
-            
+            # Only kill the daemon pid. The OS will reap the children.
+            os.kill(pid, signal.SIGKILL)
             time.sleep(FORCE_KILL_RETRY_WAIT_S)
 
             if is_process_alive(pid):
@@ -371,7 +370,7 @@ def daemon_status(
 ):
     """
     Check the health of the AI daemon process.
-    
+
     Shows daemon process status only (running, PID, health).
     For detailed AI instance status, use 'aicli status'.
 
@@ -390,18 +389,14 @@ def daemon_status(
 
     # Check health
     is_healthy, error = check_daemon_health(host, port, timeout=API_HEALTH_CHECK_TIMEOUT_S)
-    
+
     if not is_healthy:
         if json_output:
             envelope = {
                 "ok": False,
                 "code": 1,
                 "message": error or "Daemon not running",
-                "data": {
-                    "running": False,
-                    "pid": None,
-                    "api_url": f"http://{host}:{port}"
-                }
+                "data": {"running": False, "pid": None, "api_url": f"http://{host}:{port}"},
             }
             typer.echo(json.dumps(envelope, indent=2))
         else:
@@ -413,17 +408,13 @@ def daemon_status(
 
     # Healthy: Get PID
     pid = get_daemon_pid_from_api(host, port)
-    
+
     if json_output:
         envelope = {
             "ok": True,
             "code": 0,
             "message": "Daemon running and healthy",
-            "data": {
-                "running": True,
-                "pid": pid,
-                "api_url": f"http://{host}:{port}"
-            }
+            "data": {"running": True, "pid": pid, "api_url": f"http://{host}:{port}"},
         }
         typer.echo(json.dumps(envelope, indent=2))
     else:

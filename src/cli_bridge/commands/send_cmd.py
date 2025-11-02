@@ -6,12 +6,13 @@ and displaying the response. It acts as a lightweight client, packaging the
 user's request and sending it over HTTP.
 """
 
-import typer
-import requests
 import json
 
-from ..errors import CLIError, DaemonNotRunning
+import requests
+import typer
+
 from ..constants import API_REQUEST_TIMEOUT_BUFFER_S
+from ..errors import DaemonNotRunning
 
 
 def run(
@@ -28,7 +29,7 @@ def run(
 ) -> int:
     """
     Executes the 'send' command by sending a request to the daemon.
-    
+
     Args:
         host: Daemon host (from config)
         port: Daemon port (from config)
@@ -40,7 +41,7 @@ def run(
         debug: Enable debug output
         inject: Optional injection parameter
         contextsize: Optional context size parameter
-    
+
     Returns:
         Exit code (0 for success, non-zero for errors)
     """
@@ -52,7 +53,7 @@ def run(
     if len(ai_name) > 64:
         typer.secho("✗ AI name too long (max 64 characters)", fg=typer.colors.RED)
         return 1
-    
+
     try:
         daemon_url = f"http://{host}:{port}/send"
 
@@ -89,12 +90,15 @@ def run(
             # Uniform JSON envelope
             success = response_data.get("success", False)
             metadata = response_data.get("metadata", {})
-            
+
             envelope = {
                 "ok": success,
                 "code": 0 if success else 1,
-                "message": "Success" if success else (
-                    metadata.get("error", {}).get("message") if isinstance(metadata.get("error"), dict)
+                "message": "Success"
+                if success
+                else (
+                    metadata.get("error", {}).get("message")
+                    if isinstance(metadata.get("error"), dict)
                     else str(metadata.get("error", "Failed"))
                 ),
                 "data": {
@@ -102,7 +106,7 @@ def run(
                     "markdown": response_data.get("markdown"),
                     "elapsed_ms": metadata.get("elapsed_ms"),
                     "timeout_s": metadata.get("timeout_s"),
-                }
+                },
             }
             typer.echo(json.dumps(envelope, indent=2))
         else:

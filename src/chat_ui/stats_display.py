@@ -4,8 +4,9 @@
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk
 from typing import Any
+
+from gi.repository import Gtk
 
 from chat_ui import stats_helper
 

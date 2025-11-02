@@ -8,8 +8,7 @@ import json
 import os
 import re
 import sys
-import textwrap
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Iterator, List, Optional
 
@@ -96,6 +95,7 @@ TEXT_EXTS = {
 # Helpers
 # ============================================================
 
+
 def is_text_ext(path: Path) -> bool:
     return path.suffix.lower() in TEXT_EXTS
 
@@ -144,7 +144,7 @@ def load_text_file_or_default(file_path: Optional[str], default_text: str) -> st
     """
     if file_path is None:
         return default_text
-    
+
     try:
         path = Path(file_path).expanduser()
         if not path.exists():
@@ -153,7 +153,7 @@ def load_text_file_or_default(file_path: Optional[str], default_text: str) -> st
         if not path.is_file():
             print(f"Error: specified path is not a file: {file_path}", file=sys.stderr)
             sys.exit(2)
-        
+
         return path.read_text(encoding="utf-8")
     except Exception as e:
         print(f"Error reading file {file_path}: {e}", file=sys.stderr)
@@ -186,13 +186,13 @@ def discover_module_root(start: Path) -> Optional[Path]:
     Module root: walk upward while __init__.py exists in each directory.
     Return the LAST (highest) directory that contained __init__.py before
     encountering a directory without one.
-    
-    Spec: "find the module root (walk up while __init__.py exists; root is 
+
+    Spec: "find the module root (walk up while __init__.py exists; root is
     first directory without __init__.py, using the last one that had it)"
     """
     cur = normalize_dir(start)
     last_with_init: Optional[Path] = None
-    
+
     # Walk upward through the hierarchy
     for p in [cur, *cur.parents]:
         if (p / "__init__.py").exists():
@@ -201,13 +201,14 @@ def discover_module_root(start: Path) -> Optional[Path]:
             # We've hit a directory without __init__.py after finding some with it
             # Return the last valid package directory
             break
-    
+
     return last_with_init
 
 
 # ============================================================
 # Outline (for Python files)
 # ============================================================
+
 
 def python_one_line_outline(lines: List[str]) -> str:
     """
@@ -250,6 +251,7 @@ def python_one_line_outline(lines: List[str]) -> str:
 # Directory Tree (optional)
 # ============================================================
 
+
 def iter_filtered_tree(root: Path) -> Iterator[str]:
     """
     Lightweight ASCII tree for orientation. Respects exclusions.
@@ -267,8 +269,11 @@ def _tree_walk(path: Path, prefix: str) -> Iterator[str]:
     if path.is_dir():
         if should_skip_dir(name):
             return
-        children = [p for p in sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
-                    if not should_skip_dir(p.name)]
+        children = [
+            p
+            for p in sorted(path.iterdir(), key=lambda p: (p.is_file(), p.name.lower()))
+            if not should_skip_dir(p.name)
+        ]
         yield f"{prefix}{name}/"
         new_prefix = prefix
         for child in children:
@@ -280,6 +285,7 @@ def _tree_walk(path: Path, prefix: str) -> Iterator[str]:
 # ============================================================
 # Content harvesting
 # ============================================================
+
 
 def collect_files(scan_root: Path, include_tests: bool) -> List[Path]:
     """
@@ -418,16 +424,16 @@ def make_preface_lines(
     scan_root: Path,
     chunk_count: int,
     project_root: Optional[Path],
-    preface_text: str = DEFAULT_PREFACE_TEXT
+    preface_text: str = DEFAULT_PREFACE_TEXT,
 ) -> List[str]:
     """
     Build the preface block (at the start of chunk 1).
     """
     proj_str = str(project_root) if project_root else "(unknown)"
-    
+
     # Format the preface text with chunk_count
     formatted_preface = preface_text.format(chunk_count=chunk_count)
-    
+
     lines = [
         "==================",
         "AI CONTEXT PREFACE",
@@ -436,18 +442,20 @@ def make_preface_lines(
         f"Project root: {proj_str}",
         "",
     ]
-    
+
     # Add the preface text (split into lines)
     lines.extend(formatted_preface.splitlines())
-    
-    lines.extend([
-        "",
-        "--- END PREFACE ---",
-        "",
-        f"Scan root: {scan_root}",
-        "",
-    ])
-    
+
+    lines.extend(
+        [
+            "",
+            "--- END PREFACE ---",
+            "",
+            f"Scan root: {scan_root}",
+            "",
+        ]
+    )
+
     return lines
 
 
@@ -516,6 +524,7 @@ def chunk_with_preface_and_suffix(
 # Orchestration
 # ============================================================
 
+
 def write_chunks_and_manifest(
     scan_root: Path,
     output_base: Path,
@@ -560,70 +569,94 @@ def write_chunks_and_manifest(
 # CLI
 # ============================================================
 
+
 def parse_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
     p = argparse.ArgumentParser(
         prog="generate_context",
         description="Generate multi-chunk AI-readable context files for a source tree.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("--chunk", type=int, default=DEFAULT_CHUNK_LINES,
-                   help="Maximum number of lines per output chunk.")
-    p.add_argument("--max-file-bytes", type=int, default=DEFAULT_MAX_FILE_BYTES,
-                   help="Skip any single file larger than this size (bytes).")
-    p.add_argument("--include-tests", action="store_true",
-                   help="Include tests/** and similar in the scan.")
-    p.add_argument("--no-tree", action="store_true",
-                   help="Do not include the directory tree section.")
-    p.add_argument("--dry-run", action="store_true",
-                   help="Do not write files; print summary + previews.")
+    p.add_argument(
+        "--chunk",
+        type=int,
+        default=DEFAULT_CHUNK_LINES,
+        help="Maximum number of lines per output chunk.",
+    )
+    p.add_argument(
+        "--max-file-bytes",
+        type=int,
+        default=DEFAULT_MAX_FILE_BYTES,
+        help="Skip any single file larger than this size (bytes).",
+    )
+    p.add_argument(
+        "--include-tests", action="store_true", help="Include tests/** and similar in the scan."
+    )
+    p.add_argument(
+        "--no-tree", action="store_true", help="Do not include the directory tree section."
+    )
+    p.add_argument(
+        "--dry-run", action="store_true", help="Do not write files; print summary + previews."
+    )
 
     # Text customization
-    p.add_argument("--preface-file", type=str, metavar="PATH",
-                   help="Path to file containing custom preface text (supports {chunk_count} placeholder).")
-    p.add_argument("--suffix-file", type=str, metavar="PATH",
-                   help="Path to file containing custom suffix text.")
+    p.add_argument(
+        "--preface-file",
+        type=str,
+        metavar="PATH",
+        help="Path to file containing custom preface text (supports {chunk_count} placeholder).",
+    )
+    p.add_argument(
+        "--suffix-file",
+        type=str,
+        metavar="PATH",
+        help="Path to file containing custom suffix text.",
+    )
 
     # Discovery: affects SCAN ROOT (not output base)
     p.add_argument(
         "--discover",
         choices=["project", "module"],
         default=None,
-        help="Adjust the SCAN ROOT by discovering the project or module root. Default: scan current directory only."
+        help="Adjust the SCAN ROOT by discovering the project or module root. Default: scan current directory only.",
     )
 
     # Output location switches (mutually exclusive)
     out_group = p.add_mutually_exclusive_group()
     out_group.add_argument(
-        "--to-project-root", action="store_true",
-        help="Write outputs under <project-root>/{}/<timestamp>/".format(CONTEXT_DIRNAME)
+        "--to-project-root",
+        action="store_true",
+        help="Write outputs under <project-root>/{}/<timestamp>/".format(CONTEXT_DIRNAME),
     )
     out_group.add_argument(
-        "--to-module-root", action="store_true",
-        help="Write outputs under <module-root>/{}/<timestamp>/".format(CONTEXT_DIRNAME)
+        "--to-module-root",
+        action="store_true",
+        help="Write outputs under <module-root>/{}/<timestamp>/".format(CONTEXT_DIRNAME),
     )
 
     return p.parse_args(argv)
 
 
-def pick_scan_root(args: argparse.Namespace, cwd: Path) -> tuple[Path, Optional[Path], Optional[Path], List[str]]:
+def pick_scan_root(
+    args: argparse.Namespace, cwd: Path
+) -> tuple[Path, Optional[Path], Optional[Path], List[str]]:
     """
     Decide the scan root based on discovery rules.
-    
+
     Spec: "First evaluate the current directory; if it already qualifies, use it.
     Otherwise walk upward appropriately to select the scan root."
-    
+
     When args.discover is None (default): use cwd exactly (no discovery).
-    
+
     Returns (scan_root, project_root, module_root, warnings)
     """
     notes: List[str] = []
-    
+
     # Always discover these for reference (and output location decisions)
     project_root = discover_project_root(cwd)
     module_root = discover_module_root(cwd)
-    
+
     scan_root = cwd  # Default: current directory
-    
+
     if args.discover == "project":
         # Check if cwd is already a project root
         if (cwd / "pyproject.toml").exists() or (cwd / ".git").exists():
@@ -631,8 +664,10 @@ def pick_scan_root(args: argparse.Namespace, cwd: Path) -> tuple[Path, Optional[
         elif project_root:
             scan_root = project_root
         else:
-            notes.append("Warn: --discover project requested but no project root found; using current directory.")
-    
+            notes.append(
+                "Warn: --discover project requested but no project root found; using current directory."
+            )
+
     elif args.discover == "module":
         # Check if cwd is already a module root (has __init__.py)
         if (cwd / "__init__.py").exists():
@@ -647,10 +682,12 @@ def pick_scan_root(args: argparse.Namespace, cwd: Path) -> tuple[Path, Optional[
             # cwd doesn't have __init__.py, but we found a module root above
             scan_root = module_root
         else:
-            notes.append("Warn: --discover module requested but no module root found; using current directory.")
-    
+            notes.append(
+                "Warn: --discover module requested but no module root found; using current directory."
+            )
+
     # When args.discover is None, fall through with scan_root = cwd
-    
+
     return (scan_root, project_root, module_root, notes)
 
 
@@ -670,13 +707,17 @@ def pick_output_base(
         if project_root:
             return (project_root, notes)
         else:
-            notes.append("Warn: --to-project-root requested but no project root found; writing under scan root.")
+            notes.append(
+                "Warn: --to-project-root requested but no project root found; writing under scan root."
+            )
             return (scan_root, notes)
     if args.to_module_root:
         if module_root:
             return (module_root, notes)
         else:
-            notes.append("Warn: --to-module-root requested but no module root found; writing under scan root.")
+            notes.append(
+                "Warn: --to-module-root requested but no module root found; writing under scan root."
+            )
             return (scan_root, notes)
 
     # Default: write under scan root
@@ -720,8 +761,10 @@ def main(argv: Optional[List[str]] = None) -> int:
     # DRY RUN MODE
     if args.dry_run:
         total_lines = sum(len(c) for c in chunks)
-        print(f"[DRY RUN] total lines (with preface & suffix): {total_lines}; "
-              f"chunk size: {args.chunk}; would write {len(chunks)} chunk(s).\n")
+        print(
+            f"[DRY RUN] total lines (with preface & suffix): {total_lines}; "
+            f"chunk size: {args.chunk}; would write {len(chunks)} chunk(s).\n"
+        )
         print(f"Scan root: {scan_root}")
         print(f"Output base (parent of '{CONTEXT_DIRNAME}'): {output_base}")
         if project_root:

@@ -11,16 +11,16 @@ from __future__ import annotations
 
 import typer
 
+# Import config and errors for dependency injection
+from daemon.config import load_config
+
 # Import version
 from . import __version__
 
 # Import command modules
 from .commands import daemon_cmd
-from .commands.status_cmd import run as status_run
 from .commands.send_cmd import run as send_run
-
-# Import config and errors for dependency injection
-from daemon.config import load_config
+from .commands.status_cmd import run as status_run
 from .errors import InvalidConfiguration
 
 # Create root CLI app
@@ -48,7 +48,7 @@ app.add_typer(daemon_cmd.app, name="daemon")
 def _get_daemon_conn() -> tuple[str, int]:
     """
     Load daemon config and return (host, port).
-    
+
     Centralizes config loading for all commands that need to connect to daemon.
     """
     try:
@@ -113,7 +113,9 @@ def send(
         ai-cli-bridge send claude --inject "You are a pirate" "Tell me a story"
     """
     host, port = _get_daemon_conn()
-    raise typer.Exit(send_run(host, port, ai_name, message, wait, timeout, as_json, debug, inject, contextsize))
+    raise typer.Exit(
+        send_run(host, port, ai_name, message, wait, timeout, as_json, debug, inject, contextsize)
+    )
 
 
 # ---------------------------------------------------------------------------

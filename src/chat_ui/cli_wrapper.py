@@ -1,10 +1,10 @@
 """CLI wrapper for ai-cli-bridge - replaces direct HTTP daemon client"""
 
-import subprocess
 import json
 import logging
-from typing import Any
+import subprocess
 from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,7 @@ SEND_TIMEOUT_S = 120
 @dataclass
 class SendResponse:
     """Response from CLI send operation"""
+
     success: bool
     snippet: str | None = None
     markdown: str | None = None
@@ -38,7 +39,7 @@ class CLIWrapper:
                 ["ai-cli-bridge", "daemon", "status"],
                 capture_output=True,
                 text=True,
-                timeout=HEALTH_TIMEOUT_S
+                timeout=HEALTH_TIMEOUT_S,
             )
             return result.returncode == 0
         except subprocess.TimeoutExpired:
@@ -55,27 +56,27 @@ class CLIWrapper:
                 ["ai-cli-bridge", "status", "--json"],
                 capture_output=True,
                 text=True,
-                timeout=STATUS_TIMEOUT_S
+                timeout=STATUS_TIMEOUT_S,
             )
-            
+
             if result.returncode != 0:
                 logger.error(f"Status command failed: {result.stderr}")
                 return None
-            
+
             try:
                 response = json.loads(result.stdout)
                 # CLI returns {"ok": true, "data": {...}}
                 if response.get("ok") and "data" in response:
                     return response["data"]
                 else:
-                    logger.error(f"Unexpected status response format")
+                    logger.error("Unexpected status response format")
                     return None
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid JSON in status response: {e}")
                 return None
 
         except subprocess.TimeoutExpired:
-            logger.error(f"Status command timed out")
+            logger.error("Status command timed out")
             return None
         except Exception as e:
             logger.error(f"Failed to get status: {e}")
@@ -129,7 +130,7 @@ class CLIWrapper:
 
         try:
             cmd = ["ai-cli-bridge", "send", ai.strip(), prompt, "--json"]
-            
+
             if not wait_for_response:
                 cmd.append("--no-wait")
             if timeout_s != 120:
@@ -139,15 +140,10 @@ class CLIWrapper:
 
             logger.debug(f"Sending prompt to {ai} via CLI")
 
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                timeout=command_timeout
-            )
+            result = subprocess.run(cmd, capture_output=True, text=True, timeout=command_timeout)
 
             if result.returncode != 0:
-                error_msg = result.stderr.strip() or result.stdout.strip() or f"Command failed"
+                error_msg = result.stderr.strip() or result.stdout.strip() or "Command failed"
                 logger.error(f"Send command failed: {error_msg}")
                 return SendResponse(success=False, error=error_msg)
 
@@ -164,7 +160,7 @@ class CLIWrapper:
                 return SendResponse(success=False, error=error_msg)
 
             data = response.get("data", {})
-            
+
             # Build metadata
             metadata = {}
             if "elapsed_ms" in data:

@@ -1,13 +1,13 @@
 # ruff: noqa: E402
 """Main entry point for AI Chat UI"""
 
-import sys
 import logging
+import sys
 
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk, Gio
+from gi.repository import Gio, Gtk
 
 from chat_ui.cli_wrapper import CLIWrapper
 from chat_ui.startup_manager import StartupManager

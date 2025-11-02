@@ -1,4 +1,3 @@
-# src/daemon/transport/web.py
 # WebTransport — concrete ITransport implementation using Playwright/CDP.
 # Drives a web chat UI end-to-end (type prompt, wait, extract).
 
@@ -10,14 +9,14 @@ import uuid
 from datetime import datetime, timezone
 from typing import Any
 
-from playwright.async_api import Page, TimeoutError as PWTimeout
+from playwright.async_api import Page
+from playwright.async_api import TimeoutError as PWTimeout
 
-from .base import ITransport, TransportKind, SendResult, ErrorCategory, ErrorCode, TransportError
+from .base import ErrorCategory, ErrorCode, ITransport, SendResult, TransportError, TransportKind
 
 
 def _iso_now() -> str:
     return datetime.now(timezone.utc).isoformat()
-
 
 
 def _create_error(
@@ -26,11 +25,11 @@ def _create_error(
     message: str,
     user_action: str | None = None,
     recoverable: bool = True,
-    **transport_details
+    **transport_details,
 ) -> dict[str, Any]:
     """
     Helper to create standardized error response.
-    
+
     Args:
         category: Error category
         code: Standardized error code
@@ -38,7 +37,7 @@ def _create_error(
         user_action: Optional suggested action
         recoverable: Whether retry might work
         **transport_details: Transport-specific debug info
-    
+
     Returns:
         Error dict for metadata
     """
@@ -48,7 +47,7 @@ def _create_error(
         message=message,
         user_action=user_action,
         recoverable=recoverable,
-        transport_details=transport_details if transport_details else None
+        transport_details=transport_details if transport_details else None,
     )
     return error.to_dict()
 
@@ -59,11 +58,11 @@ def _create_metadata(
     ws_url: str | None = None,
     ws_source: str = "none",
     error: dict | None = None,
-    **extra
+    **extra,
 ) -> dict[str, Any]:
     """
     Helper to create consistent metadata structure.
-    
+
     Args:
         start_ts: Operation start timestamp
         timeout_s: Configured timeout
@@ -71,7 +70,7 @@ def _create_metadata(
         ws_source: CDP origin
         error: Error dict from _create_error
         **extra: Additional metadata fields
-    
+
     Returns:
         Metadata dict
     """
@@ -82,14 +81,14 @@ def _create_metadata(
         "duration_s": round(time.time() - start_ts, 3),
         "timestamp": datetime.utcnow().isoformat() + "Z",
     }
-    
+
     if ws_url:
         meta["cdp_url"] = ws_url
     if ws_source:
         meta["cdp_origin"] = ws_source
     if error:
         meta["error"] = error
-    
+
     meta.update(extra)
     return meta
 
@@ -166,44 +165,50 @@ class WebTransport(ITransport):
         try:
             ws_url, ws_source = await self._get_cdp_url()
             if not ws_url:
+                # 1. CDP_UNAVAILABLE
                 return (
                     False,
                     None,
                     None,
-                    {
-                        "transport": "web",
-                        "start_ts": start_ts,
-                        "timeout_s": timeout_s,
-                        "cdp_url": None,
-                        "cdp_origin": ws_source,
-                        "duration_s": round(time.time() - start_ts, 3),
-                        "timestamp": datetime.utcnow().isoformat() + "Z",
-                        "error": {
-                            "code": "CDP_UNAVAILABLE",
-                            "message": "No browser CDP endpoint available.",
-                        },
-                    },
+                    _create_metadata(
+                        start_ts=start_ts,
+                        timeout_s=timeout_s,
+                        ws_url=None,
+                        ws_source=ws_source,
+                        error=_create_error(
+                            category=ErrorCategory.CONNECTION,
+                            code=ErrorCode.CONNECTION_UNAVAILABLE,
+                            message="Cannot connect to AI service",
+                            user_action="Please check that the browser is running and accessible.",
+                            recoverable=True,
+                            transport_error="CDP_UNAVAILABLE",
+                            original_message="No browser CDP endpoint available.",
+                        ),
+                    ),
                 )
 
             page = await self._pick_page(ws_url)
             if not page:
+                # 2. PAGE_UNAVAILABLE
                 return (
                     False,
                     None,
                     None,
-                    {
-                        "transport": "web",
-                        "start_ts": start_ts,
-                        "timeout_s": timeout_s,
-                        "cdp_url": ws_url,
-                        "cdp_origin": ws_source,
-                        "duration_s": round(time.time() - start_ts, 3),
-                        "timestamp": datetime.utcnow().isoformat() + "Z",
-                        "error": {
-                            "code": "PAGE_UNAVAILABLE",
-                            "message": "Could not obtain a page for the target site.",
-                        },
-                    },
+                    _create_metadata(
+                        start_ts=start_ts,
+                        timeout_s=timeout_s,
+                        ws_url=ws_url,
+                        ws_source=ws_source,
+                        error=_create_error(
+                            category=ErrorCategory.CONNECTION,
+                            code=ErrorCode.CONNECTION_UNAVAILABLE,
+                            message="Cannot connect to AI service",
+                            user_action="Please check the AI service tab in your browser.",
+                            recoverable=True,
+                            transport_error="PAGE_UNAVAILABLE",
+                            original_message="Could not obtain a page for the target site.",
+                        ),
+                    ),
                 )
 
             self._page = page
@@ -211,25 +216,27 @@ class WebTransport(ITransport):
             # Ensure chat is ready (input visible)
             ready = await self._ensure_chat_ready(page)
             if not ready:
+                # 3. SELECTOR_MISSING
                 return (
                     False,
                     None,
                     None,
-                    {
-                        "transport": "web",
-                        "start_ts": start_ts,
-                        "timeout_s": timeout_s,
-                        "cdp_url": ws_url,
-                        "cdp_origin": ws_source,
-                        "duration_s": round(time.time() - start_ts, 3),
-                        "timestamp": datetime.utcnow().isoformat() + "Z",
-                        "error": {
-                            "code": "SELECTOR_MISSING",
-                            "message": "Chat input not ready (selector missing or not visible).",
-                            "suggested_action": "Reload the tab or sign in again.",
-                            "evidence": {"page_url": page.url},
-                        },
-                    },
+                    _create_metadata(
+                        start_ts=start_ts,
+                        timeout_s=timeout_s,
+                        ws_url=ws_url,
+                        ws_source=ws_source,
+                        error=_create_error(
+                            category=ErrorCategory.AUTHENTICATION,
+                            code=ErrorCode.SESSION_INVALID,
+                            message="Your session needs to be refreshed",
+                            user_action="Reload the tab or sign in again.",
+                            recoverable=True,
+                            transport_error="SELECTOR_MISSING",
+                            original_message="Chat input not ready (selector missing or not visible).",
+                            page_url=page.url,
+                        ),
+                    ),
                 )
 
             # Opportunistic banner/alert check (non-fatal)
@@ -254,24 +261,27 @@ class WebTransport(ITransport):
             sent_ok = await self._send_message(page, message)
             stage_log["send_complete"] = _iso_now()
             if not sent_ok:
+                # 4. SEND_FAILED
                 return (
                     False,
                     None,
                     None,
-                    {
-                        "transport": "web",
-                        "start_ts": start_ts,
-                        "timeout_s": timeout_s,
-                        "cdp_url": ws_url,
-                        "cdp_origin": ws_source,
-                        "duration_s": round(time.time() - start_ts, 3),
-                        "timestamp": datetime.utcnow().isoformat() + "Z",
-                        "error": {
-                            "code": "SEND_FAILED",
-                            "message": "Failed to send message (input not fillable).",
-                            "evidence": {"page_url": page.url},
-                        },
-                    },
+                    _create_metadata(
+                        start_ts=start_ts,
+                        timeout_s=timeout_s,
+                        ws_url=ws_url,
+                        ws_source=ws_source,
+                        error=_create_error(
+                            category=ErrorCategory.INPUT,
+                            code=ErrorCode.SEND_FAILED,
+                            message="Failed to send message",
+                            user_action="Please try sending the message again.",
+                            recoverable=False,
+                            transport_error="SEND_FAILED",
+                            original_message="Failed to send message (input not fillable).",
+                            page_url=page.url,
+                        ),
+                    ),
                 )
 
             snippet = None
@@ -287,39 +297,45 @@ class WebTransport(ITransport):
                     snippet, markdown = await self._extract_response(page, baseline_count)
                     stage_log["extract_done"] = _iso_now()
                     if not markdown or not markdown.strip():
+                        # 6. EMPTY_RESPONSE
                         warnings.append(
-                            {
-                                "code": "EMPTY_RESPONSE",
-                                "message": "Response completed but no content extracted.",
-                                "severity": "warn",
-                                "suggested_action": "Check the provider tab; may need to retry.",
-                                "evidence": {"page_url": page.url},
-                                "stage_log": dict(stage_log),
-                            }
+                            _create_error(
+                                category=ErrorCategory.RESPONSE,
+                                code=ErrorCode.EMPTY_RESPONSE,
+                                message="AI returned an empty response",
+                                user_action="Check the provider tab; may need to retry.",
+                                recoverable=True,
+                                transport_error="EMPTY_RESPONSE",
+                                original_message="Response completed but no content extracted.",
+                                severity="warn",
+                                page_url=page.url,
+                                stage_log=dict(stage_log),
+                            )
                         )
                 else:
+                    # 5. RESPONSE_TIMEOUT
                     return (
                         False,
                         None,
                         None,
-                        {
-                            "transport": "web",
-                            "start_ts": start_ts,
-                            "timeout_s": timeout_s,
-                            "cdp_url": ws_url,
-                            "cdp_origin": ws_source,
-                            "duration_s": round(time.time() - start_ts, 3),
-                            "timestamp": datetime.utcnow().isoformat() + "Z",
-                            "error": {
-                                "code": "RESPONSE_TIMEOUT",
-                                "message": f"Prompt sent, but no response completed within {timeout_s}s.",
-                                "evidence": {
-                                    "page_url": page.url,
-                                    "selector": self.STOP_BUTTON,
-                                },
-                                "stage_log": dict(stage_log),
-                            },
-                        },
+                        _create_metadata(
+                            start_ts=start_ts,
+                            timeout_s=timeout_s,
+                            ws_url=ws_url,
+                            ws_source=ws_source,
+                            stage_log=dict(stage_log),
+                            error=_create_error(
+                                category=ErrorCategory.TIMEOUT,
+                                code=ErrorCode.RESPONSE_TIMEOUT,
+                                message="AI is taking too long to respond",
+                                user_action="Please try again. If this persists, try reloading the session.",
+                                recoverable=True,
+                                transport_error="RESPONSE_TIMEOUT",
+                                original_message=f"Prompt sent, but no response completed within {timeout_s}s.",
+                                page_url=page.url,
+                                selector=self.STOP_BUTTON,
+                            ),
+                        ),
                     )
                 elapsed_ms = int((time.time() - t0) * 1000)
 
@@ -342,23 +358,27 @@ class WebTransport(ITransport):
         except Exception as e:
             if self._logger:
                 self._logger.error(f"WebTransport.send_prompt failed: {e}", exc_info=True)
+            # 7. UNEXPECTED_EXCEPTION
             return (
                 False,
                 None,
                 None,
-                {
-                    "transport": "web",
-                    "start_ts": start_ts,
-                    "timeout_s": timeout_s,
-                    "cdp_url": self._cdp_url,
-                    "cdp_origin": self._cdp_origin,
-                    "duration_s": round(time.time() - start_ts, 3),
-                    "timestamp": datetime.utcnow().isoformat() + "Z",
-                    "error": {
-                        "code": "UNEXPECTED_EXCEPTION",
-                        "message": str(e),
-                    },
-                },
+                _create_metadata(
+                    start_ts=start_ts,
+                    timeout_s=timeout_s,
+                    ws_url=self._cdp_url,
+                    ws_source=self._cdp_origin,
+                    error=_create_error(
+                        category=ErrorCategory.UNEXPECTED,
+                        code=ErrorCode.UNEXPECTED,
+                        message="An unexpected error occurred",
+                        user_action="Please report this bug.",
+                        recoverable=True,
+                        transport_error="UNEXPECTED_EXCEPTION",
+                        original_message=str(e),
+                        exception_type=type(e).__name__,
+                    ),
+                ),
             )
 
     async def start_new_session(self) -> bool:
@@ -489,19 +509,23 @@ class WebTransport(ITransport):
         """
         try:
             try:
+                # Wait for the stop button to appear first
                 await page.wait_for_selector(self.STOP_BUTTON, state="visible", timeout=10000)
-                # Disappear within timeout_s
+                # Now, wait for it to disappear within the main timeout
                 deadline = time.time() + timeout_s
                 while time.time() < deadline:
                     if await page.locator(self.STOP_BUTTON).count() == 0:
-                        return True
+                        return True  # It appeared and then disappeared
                     await asyncio.sleep(self.COMPLETION_CHECK_INTERVAL_S)
-                return False
+                return False  # Timed out waiting for it to disappear
             except PWTimeout:
-                return True  # stop never appeared; treat as instant
+                # wait_for_selector timed out (stop never appeared)
+                return True  # Treat as instant completion
             except Exception:
-                return True
+                # Other error (e.g., page closed)
+                return True  # Don't hang
         except Exception:
+            # Outer try/except
             return True
 
     async def _extract_response(

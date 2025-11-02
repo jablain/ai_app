@@ -15,12 +15,13 @@ Exit codes:
 from __future__ import annotations
 
 import json as jsonlib
-import requests
-import typer
 from typing import Any
 
-from ..errors import DaemonNotRunning, UnknownAI
+import requests
+import typer
+
 from ..constants import API_STATUS_CHECK_TIMEOUT_S
+from ..errors import DaemonNotRunning, UnknownAI
 
 
 def _print_human_status(full_status: dict[str, Any], ai_name: str | None) -> int:
@@ -33,7 +34,9 @@ def _print_human_status(full_status: dict[str, Any], ai_name: str | None) -> int
     typer.echo(f"  PID:               {daemon.get('pid', 'unknown')}")
     available = daemon.get("available_ais") or list(ais.keys())
     typer.echo(f"  Available AIs:     {', '.join(available) if available else '(none)'}")
-    typer.echo(f"  Browser Pool:      {'active' if daemon.get('browser_pool_active') else 'inactive'}")
+    typer.echo(
+        f"  Browser Pool:      {'active' if daemon.get('browser_pool_active') else 'inactive'}"
+    )
     typer.echo(f"  CDP Health:        {'OK' if daemon.get('cdp_healthy') else 'unhealthy'}")
     typer.echo("")
 
@@ -68,8 +71,18 @@ def _print_human_status(full_status: dict[str, Any], ai_name: str | None) -> int
             typer.echo(f"  Context Window:    {ctw} tokens")
         if "ctaw_usage_percent" in v:
             typer.echo(f"  Context Used:      {v.get('ctaw_usage_percent')}%")
-        if "error" in v:
-            typer.echo(f"  Error:             {v.get('error')}")
+        error_data = v.get("error")
+        if isinstance(error_data, dict):
+            # New structured error
+            msg = error_data.get("message", "Unknown error")
+            typer.secho(f"  Error:             {msg}", fg=typer.colors.YELLOW)
+            if error_data.get("user_action"):
+                typer.secho(
+                    f"  Suggested Action:   {error_data['user_action']}", fg=typer.colors.YELLOW
+                )
+        elif error_data:
+            # Old error (string) or unexpected format
+            typer.secho(f"  Error:             {error_data}", fg=typer.colors.YELLOW)
         typer.echo("")
 
     # Render one or all
@@ -123,31 +136,21 @@ def run(host: str, port: int, ai_name: str, json_out: bool = False) -> int:
                         "ok": False,
                         "code": UnknownAI.exit_code,
                         "message": f"AI '{ai_name}' not found",
-                        "data": {
-                            "available": list(ais.keys())
-                        }
+                        "data": {"available": list(ais.keys())},
                     }
                     typer.echo(jsonlib.dumps(envelope, indent=2))
                     return UnknownAI.exit_code
-                
+
                 only = {key_map[requested.lower()]: ais[key_map[requested.lower()]]}
                 envelope = {
                     "ok": True,
                     "code": 0,
                     "message": "Status retrieved",
-                    "data": {
-                        "daemon": status.get("daemon", {}),
-                        "ais": only
-                    }
+                    "data": {"daemon": status.get("daemon", {}), "ais": only},
                 }
                 typer.echo(jsonlib.dumps(envelope, indent=2))
             else:
-                envelope = {
-                    "ok": True,
-                    "code": 0,
-                    "message": "Status retrieved",
-                    "data": status
-                }
+                envelope = {"ok": True, "code": 0, "message": "Status retrieved", "data": status}
                 typer.echo(jsonlib.dumps(envelope, indent=2))
             return 0
 

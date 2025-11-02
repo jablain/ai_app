@@ -1,6 +1,7 @@
 """Factory for creating AI instances."""
 
 from typing import Any
+
 from .base import BaseAI
 
 

@@ -7,12 +7,12 @@ import threading
 import gi
 
 gi.require_version("Gtk", "4.0")
-from gi.repository import Gtk, GLib
+from gi.repository import GLib, Gtk
 
+from chat_ui import stats_helper
 from chat_ui.cli_wrapper import CLIWrapper, SendResponse
 from chat_ui.response_display import ResponseDisplay
 from chat_ui.stats_display import StatsDisplay
-from chat_ui import stats_helper
 
 logger = logging.getLogger(__name__)
 
@@ -402,17 +402,15 @@ class ChatWindow(Gtk.ApplicationWindow):
         """Handle window close - stop daemon and CDP"""
         # Stop periodic refresh
         self._stop_periodic_refresh()
-        
+
         logger.info("Window closing, stopping daemon and CDP...")
-        
+
         # Stop the daemon (which should also stop CDP)
         try:
             import subprocess
+
             result = subprocess.run(
-                ["ai-cli-bridge", "daemon", "stop"],
-                capture_output=True,
-                text=True,
-                timeout=10
+                ["ai-cli-bridge", "daemon", "stop"], capture_output=True, text=True, timeout=10
             )
             if result.returncode == 0:
                 logger.info("✓ Daemon stopped successfully")
@@ -422,5 +420,5 @@ class ChatWindow(Gtk.ApplicationWindow):
             logger.error("Daemon stop timed out after 10 seconds")
         except Exception as e:
             logger.error(f"Failed to stop daemon: {e}")
-        
+
         return False  # Allow close

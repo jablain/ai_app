@@ -11,10 +11,10 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 
-from daemon.browser.connection_pool import BrowserConnectionPool
-from daemon.health import HealthMonitor
 from daemon.ai.factory import AIFactory
+from daemon.browser.connection_pool import BrowserConnectionPool
 from daemon.config import load_config
+from daemon.health import HealthMonitor
 from daemon.transport import ClaudeWebTransport
 
 # Configure logging
@@ -266,7 +266,7 @@ async def status():
     Get daemon and AI instance status.
     """
     import os  # Add at top of function
-    
+
     browser_pool = daemon_state["browser_pool"]
     ai_instances = daemon_state["ai_instances"]
     health_monitor = daemon_state["health_monitor"]
@@ -297,6 +297,7 @@ async def status():
         daemon=daemon_status,
         ais=ai_statuses,
     )
+
 
 @app.post("/send", response_model=SendResponse)
 async def send(request: SendRequest):

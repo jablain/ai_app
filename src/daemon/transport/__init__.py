@@ -14,12 +14,12 @@ from __future__ import annotations
 
 # Always export the interface
 from .base import ITransport  # noqa: F401
+from .chatgpt_web import ChatGPTWebTransport  # noqa: F401
+from .claude_web import ClaudeWebTransport  # noqa: F401
+from .gemini_web import GeminiWebTransport  # noqa: F401
 
 # Explicit imports for concrete transports (raise on real problems)
 from .web import WebTransport  # noqa: F401
-from .claude_web import ClaudeWebTransport  # noqa: F401
-from .chatgpt_web import ChatGPTWebTransport  # noqa: F401
-from .gemini_web import GeminiWebTransport  # noqa: F401
 
 __all__ = [
     "ITransport",

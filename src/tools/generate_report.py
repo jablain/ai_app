@@ -8,9 +8,9 @@ import json
 import re
 import subprocess
 import sys
-from dataclasses import dataclass, asdict
-from pathlib import Path
 from collections.abc import Iterator
+from dataclasses import asdict, dataclass
+from pathlib import Path
 
 # ---------- Defaults / knobs ----------
 DEFAULT_CHUNK_LINES = 1500

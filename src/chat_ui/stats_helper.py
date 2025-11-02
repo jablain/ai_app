@@ -1,7 +1,7 @@
 """Helper functions for tolerant metadata parsing"""
 
-from typing import Any, Union
 from collections.abc import Iterable
+from typing import Any, Union
 
 Number = Union[int, float]
 

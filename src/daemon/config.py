@@ -28,8 +28,8 @@ import tomli
 
 # POSIX-only imports (Linux/Unix) - defensive imports
 try:
-    import pwd
     import grp
+    import pwd
 
     _POSIX_AVAILABLE = True
 except ImportError:
@@ -310,7 +310,7 @@ def load_config() -> AppConfig:
 
     if not config_file.exists():
         _logger.info(
-            "No config file found at %s. Using defaults. " "Create the file to customize settings.",
+            "No config file found at %s. Using defaults. Create the file to customize settings.",
             config_file,
         )
         return config
