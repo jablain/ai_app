@@ -66,7 +66,11 @@ class ChatGPTAI(BaseAI):
         if success and (markdown or snippet):
             try:
                 response_text = markdown or snippet or ""
-                session_meta = self._update_session_from_interaction(message, response_text)
+                # NEW: Extract timing from transport metadata
+                response_time_ms = meta.get("elapsed_ms")
+                session_meta = self._update_session_from_interaction(
+                    message, response_text, response_time_ms
+                )
                 for k, v in session_meta.items():
                     meta.setdefault(k, v)
             except Exception as e:

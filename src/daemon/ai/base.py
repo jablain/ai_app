@@ -68,13 +68,32 @@ class SessionState:
     last_interaction_time: float | None = None
     message_history: list[dict[str, Any]] = field(default_factory=list)
 
-    def add_message(self, sent_tokens: int, response_tokens: int) -> int:
+    # NEW: Token breakdown tracking
+
+    sent_tokens: int = 0
+    response_tokens: int = 0
+
+    # NEW: Timing and velocity tracking
+    last_response_time_ms: int | None = None
+    tokens_per_sec: float | None = None
+
+    # NEW: Running averages
+    avg_response_time_ms: float | None = None
+    avg_tokens_per_sec: float | None = None
+
+    # NEW: Response time history for calculating averages
+    response_times_ms: list[int] = field(default_factory=list)
+
+    def add_message(
+        self, sent_tokens: int, response_tokens: int, response_time_ms: int | None = None
+    ) -> int:
         """
         Record a message exchange and return tokens used.
 
         Args:
             sent_tokens: Token count of sent message
             response_tokens: Token count of response
+            response_time_ms: Response time in milliseconds (optional)
 
         Returns:
             Total tokens used in this exchange
@@ -86,6 +105,31 @@ class SessionState:
         tokens_used = sent_tokens + response_tokens
         self.token_count += tokens_used
 
+        # NEW: Track token breakdown
+        self.sent_tokens += sent_tokens
+        self.response_tokens += response_tokens
+
+        # NEW: Track timing and velocity
+        if response_time_ms is not None and response_time_ms > 0:
+            self.last_response_time_ms = response_time_ms
+            self.response_times_ms.append(response_time_ms)
+
+            # Calculate tokens per second for this message
+            response_time_s = response_time_ms / 1000.0
+            if response_time_s > 0:
+                self.tokens_per_sec = response_tokens / response_time_s
+
+            # Update running averages
+            if len(self.response_times_ms) > 0:
+                self.avg_response_time_ms = sum(self.response_times_ms) / len(
+                    self.response_times_ms
+                )
+
+                # Calculate average tokens per second across all responses
+                total_response_time_s = sum(self.response_times_ms) / 1000.0
+                if total_response_time_s > 0:
+                    self.avg_tokens_per_sec = self.response_tokens / total_response_time_s
+
         self.message_history.append(
             {
                 "turn": self.turn_count,
@@ -93,9 +137,9 @@ class SessionState:
                 "sent_tokens": sent_tokens,
                 "response_tokens": response_tokens,
                 "tokens_used": tokens_used,
+                "response_time_ms": response_time_ms,
             }
         )
-
         return tokens_used
 
     def reset(self) -> None:
@@ -106,6 +150,17 @@ class SessionState:
         self.session_start_time = time.time()
         self.last_interaction_time = None
         self.message_history.clear()
+
+        # NEW: Reset token breakdown
+        self.sent_tokens = 0
+        self.response_tokens = 0
+
+        # NEW: Reset timing and velocity
+        self.last_response_time_ms = None
+        self.tokens_per_sec = None
+        self.avg_response_time_ms = None
+        self.avg_tokens_per_sec = None
+        self.response_times_ms.clear()
 
     def get_duration_s(self) -> float:
         """Get session duration in seconds."""
@@ -126,7 +181,7 @@ class SessionState:
 
     def to_dict(self) -> dict[str, Any]:
         """Export state as dictionary for status reporting."""
-        return {
+        result = {
             "turn_count": self.turn_count,
             "token_count": self.token_count,
             "message_count": self.message_count,
@@ -134,7 +189,23 @@ class SessionState:
             "last_interaction_time": self.last_interaction_time,
             "ctaw_size": self.ctaw_size,
             "ctaw_usage_percent": round(self.get_ctaw_usage_percent(), 2),
+            # NEW: Token breakdown
+            "sent_tokens": self.sent_tokens,
+            "response_tokens": self.response_tokens,
+            # NEW: Timing and velocity (only include if available)
+            "last_response_time_ms": self.last_response_time_ms,
+            "tokens_per_sec": round(self.tokens_per_sec, 1)
+            if self.tokens_per_sec is not None
+            else None,
+            # NEW: Running averages (only include if available)
+            "avg_response_time_ms": round(self.avg_response_time_ms, 1)
+            if self.avg_response_time_ms is not None
+            else None,
+            "avg_tokens_per_sec": round(self.avg_tokens_per_sec, 1)
+            if self.avg_tokens_per_sec is not None
+            else None,
         }
+        return result
 
 
 # =========================
@@ -335,7 +406,9 @@ class BaseAI(ABC):
     # Protected Helpers for Subclasses
     # =========================
 
-    def _update_session_from_interaction(self, message: str, response: str) -> dict[str, Any]:
+    def _update_session_from_interaction(
+        self, message: str, response: str, response_time_ms: int | None = None
+    ) -> dict[str, Any]:
         """
         Update session state after a successful interaction.
 
@@ -346,6 +419,7 @@ class BaseAI(ABC):
         Args:
             message: The sent message
             response: The received response
+            response_time_ms: Response time in milliseconds (optional)
 
         Returns:
             Metadata dict with session information
@@ -354,8 +428,8 @@ class BaseAI(ABC):
         sent_tokens = self._count_tokens(message)
         response_tokens = self._count_tokens(response)
 
-        # Update session state
-        tokens_used = self._session.add_message(sent_tokens, response_tokens)
+        # Update session state (NOW includes timing)
+        tokens_used = self._session.add_message(sent_tokens, response_tokens, response_time_ms)
 
         # Build metadata
         metadata = {
@@ -370,6 +444,12 @@ class BaseAI(ABC):
             "ctaw_size": self._session.ctaw_size,
             "session_duration_s": round(self._session.get_duration_s(), 1),
         }
+
+        # NEW: Include timing/velocity if available
+        if response_time_ms is not None:
+            metadata["response_time_ms"] = response_time_ms
+        if self._session.tokens_per_sec is not None:
+            metadata["tokens_per_sec"] = round(self._session.tokens_per_sec, 1)
 
         self._logger.debug(
             f"Turn: {self._session.turn_count}, "

@@ -161,14 +161,12 @@ class CLIWrapper:
 
             data = response.get("data", {})
 
-            # Build metadata
-            metadata = {}
-            if "elapsed_ms" in data:
-                metadata["elapsed_ms"] = data["elapsed_ms"]
-            if "timeout_s" in data:
-                metadata["timeout_s"] = data["timeout_s"]
+            # All metadata fields are now in 'data' thanks to **metadata spread in send_cmd.py
+            # Just pass through the entire data dict (excluding snippet/markdown)
+            metadata = {k: v for k, v in data.items() if k not in ("snippet", "markdown")}
 
             logger.info(f"Prompt sent successfully to {ai} via CLI")
+            logger.debug(f"Response metadata: {metadata}")
 
             return SendResponse(
                 success=True,

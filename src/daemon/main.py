@@ -249,8 +249,8 @@ app.add_middleware(
 # --- Endpoints ---
 
 
-@app.get("/healthz", response_model=HealthResponse)
-async def healthz():
+@app.get("/health", response_model=HealthResponse)
+async def health():
     """Health check endpoint."""
     uptime = time.time() - daemon_state["startup_time"] if daemon_state["startup_time"] else 0
     return HealthResponse(

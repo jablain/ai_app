@@ -21,6 +21,12 @@ class StatsDisplay(Gtk.Box):
         self.set_margin_start(6)
         self.set_margin_end(6)
 
+        # Store performance metrics persistently (don't clear on status refresh)
+        self._last_response_ms: int | None = None
+        self._avg_response_ms: float | None = None
+        self._tokens_per_sec: float | None = None
+        self._avg_tokens_per_sec: float | None = None
+
         # Add title
         title = Gtk.Label()
         title.set_markup("<b>Statistics</b>")
@@ -56,6 +62,29 @@ class StatsDisplay(Gtk.Box):
         # Context stats
         self.context_label = self._create_stat_label("Context: -", selectable=True)
         self.usage_label = self._create_stat_label("Usage: -", selectable=True)
+
+        # Add separator for performance metrics
+        separator2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
+        self.append(separator2)
+
+        # Performance section title
+        perf_title = Gtk.Label()
+        perf_title.set_markup("<b>Performance</b>")
+        perf_title.set_halign(Gtk.Align.START)
+        self.append(perf_title)
+
+        # Response timing
+        self.last_response_label = self._create_stat_label("Last Response: -", selectable=True)
+        self.avg_response_label = self._create_stat_label("Avg Response: -", selectable=True)
+
+        # Token velocity
+        self.tokens_per_sec_label = self._create_stat_label("Tokens/sec: -", selectable=True)
+        self.avg_tokens_per_sec_label = self._create_stat_label(
+            "Avg Tokens/sec: -", selectable=True
+        )
+
+        # Session duration
+        self.session_duration_label = self._create_stat_label("Session: -", selectable=True)
 
     def _create_stat_label(
         self, text: str, selectable: bool = False, monospace: bool = False
@@ -107,6 +136,9 @@ class StatsDisplay(Gtk.Box):
         """
         Update stats from response metadata (tolerant parsing)
 
+        This method updates session stats (turn, tokens, context) and
+        optionally updates performance metrics if present in metadata.
+
         Args:
             metadata: Response metadata dictionary from daemon
         """
@@ -143,6 +175,95 @@ class StatsDisplay(Gtk.Box):
         else:
             self.usage_label.set_text("Usage: -")
 
+        # Session duration (always update if present)
+        session_duration_s = stats_helper.extract_session_duration_s(metadata)
+        if session_duration_s is not None:
+            if session_duration_s >= 3600:
+                hours = int(session_duration_s // 3600)
+                minutes = int((session_duration_s % 3600) // 60)
+                self.session_duration_label.set_text(f"Session: {hours}h {minutes}m")
+            elif session_duration_s >= 60:
+                minutes = int(session_duration_s // 60)
+                seconds = int(session_duration_s % 60)
+                self.session_duration_label.set_text(f"Session: {minutes}m {seconds}s")
+            else:
+                self.session_duration_label.set_text(f"Session: {session_duration_s:.0f}s")
+        else:
+            self.session_duration_label.set_text("Session: -")
+
+        # Performance metrics: Only update if present in metadata (sticky behavior)
+        # This allows status refreshes to update session stats without clearing performance
+        self._update_performance_if_present(metadata)
+
+    def _update_performance_if_present(self, metadata: dict[str, Any]):
+        """
+        Update performance metrics only if they're present in metadata.
+        This makes them "sticky" - they persist across status refreshes.
+
+        Args:
+            metadata: Response metadata dictionary
+        """
+        # Last response time
+        last_response_ms = stats_helper.extract_last_response_time_ms(metadata)
+        if last_response_ms is not None:
+            self._last_response_ms = last_response_ms
+
+        # Average response time
+        avg_response_ms = stats_helper.extract_avg_response_time_ms(metadata)
+        if avg_response_ms is not None:
+            self._avg_response_ms = avg_response_ms
+
+        # Tokens per second (current)
+        tokens_per_sec = stats_helper.extract_tokens_per_sec(metadata)
+        if tokens_per_sec is not None:
+            self._tokens_per_sec = tokens_per_sec
+
+        # Average tokens per second
+        avg_tokens_per_sec = stats_helper.extract_avg_tokens_per_sec(metadata)
+        if avg_tokens_per_sec is not None:
+            self._avg_tokens_per_sec = avg_tokens_per_sec
+
+        # Update labels with stored values
+        self._render_performance_metrics()
+
+    def _render_performance_metrics(self):
+        """Render performance metrics from stored values."""
+        # Last response time
+        if self._last_response_ms is not None:
+            if self._last_response_ms >= 1000:
+                self.last_response_label.set_text(
+                    f"Last Response: {self._last_response_ms / 1000:.1f}s"
+                )
+            else:
+                self.last_response_label.set_text(f"Last Response: {self._last_response_ms}ms")
+        else:
+            self.last_response_label.set_text("Last Response: -")
+
+        # Average response time
+        if self._avg_response_ms is not None:
+            if self._avg_response_ms >= 1000:
+                self.avg_response_label.set_text(
+                    f"Avg Response: {self._avg_response_ms / 1000:.1f}s"
+                )
+            else:
+                self.avg_response_label.set_text(f"Avg Response: {self._avg_response_ms:.0f}ms")
+        else:
+            self.avg_response_label.set_text("Avg Response: -")
+
+        # Tokens per second (current)
+        if self._tokens_per_sec is not None:
+            self.tokens_per_sec_label.set_text(f"Tokens/sec: {self._tokens_per_sec:.1f}")
+        else:
+            self.tokens_per_sec_label.set_text("Tokens/sec: -")
+
+        # Average tokens per second
+        if self._avg_tokens_per_sec is not None:
+            self.avg_tokens_per_sec_label.set_text(
+                f"Avg Tokens/sec: {self._avg_tokens_per_sec:.1f}"
+            )
+        else:
+            self.avg_tokens_per_sec_label.set_text("Avg Tokens/sec: -")
+
     def clear(self):
         """Clear all stats to default values"""
         self.ai_label.set_text("AI: -")
@@ -151,6 +272,14 @@ class StatsDisplay(Gtk.Box):
         self.tokens_label.set_markup("<span font_family='monospace'>Tokens: -</span>")
         self.context_label.set_text("Context: -")
         self.usage_label.set_text("Usage: -")
+        self.session_duration_label.set_text("Session: -")
+
+        # Clear performance metrics
+        self._last_response_ms = None
+        self._avg_response_ms = None
+        self._tokens_per_sec = None
+        self._avg_tokens_per_sec = None
+        self._render_performance_metrics()
 
     def get_widget(self) -> Gtk.Widget:
         """

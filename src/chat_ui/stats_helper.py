@@ -13,6 +13,11 @@ __all__ = [
     "extract_context_window",
     "extract_context_usage_percent",
     "extract_elapsed_ms",
+    "extract_last_response_time_ms",
+    "extract_tokens_per_sec",
+    "extract_avg_response_time_ms",
+    "extract_avg_tokens_per_sec",
+    "extract_session_duration_s",
 ]
 
 
@@ -141,3 +146,74 @@ def extract_elapsed_ms(metadata: dict[str, Any]) -> int | None:
     v = _first_present(metadata, ("elapsed_ms", "duration_ms", "latency_ms"))
     result = _as_int(v, 0)
     return result if v is not None else None
+
+
+def extract_last_response_time_ms(metadata: dict[str, Any]) -> int | None:
+    """
+    Extract last response time in milliseconds
+
+    Args:
+        metadata: Response metadata dictionary
+
+    Returns:
+        Last response time in ms or None if not found
+    """
+    v = _first_present(metadata, ("last_response_time_ms", "response_time_ms", "elapsed_ms"))
+    result = _as_int(v, 0)
+    return result if v is not None else None
+
+
+def extract_tokens_per_sec(metadata: dict[str, Any]) -> float | None:
+    """
+    Extract tokens per second (velocity)
+
+    Args:
+        metadata: Response metadata dictionary
+
+    Returns:
+        Tokens per second or None if not found
+    """
+    v = _first_present(metadata, ("tokens_per_sec", "token_velocity"))
+    return _as_float(v, None)
+
+
+def extract_avg_response_time_ms(metadata: dict[str, Any]) -> float | None:
+    """
+    Extract average response time in milliseconds
+
+    Args:
+        metadata: Response metadata dictionary
+
+    Returns:
+        Average response time in ms or None if not found
+    """
+    v = _first_present(metadata, ("avg_response_time_ms", "average_response_time_ms"))
+    return _as_float(v, None)
+
+
+def extract_avg_tokens_per_sec(metadata: dict[str, Any]) -> float | None:
+    """
+    Extract average tokens per second
+
+    Args:
+        metadata: Response metadata dictionary
+
+    Returns:
+        Average tokens per second or None if not found
+    """
+    v = _first_present(metadata, ("avg_tokens_per_sec", "average_tokens_per_sec"))
+    return _as_float(v, None)
+
+
+def extract_session_duration_s(metadata: dict[str, Any]) -> float | None:
+    """
+    Extract session duration in seconds
+
+    Args:
+        metadata: Response metadata dictionary
+
+    Returns:
+        Session duration in seconds or None if not found
+    """
+    v = _first_present(metadata, ("session_duration_s", "duration_s", "uptime_s"))
+    return _as_float(v, None)

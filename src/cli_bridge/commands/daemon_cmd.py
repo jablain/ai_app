@@ -91,12 +91,12 @@ def check_daemon_health(
     host: str, port: int, timeout: float = API_HEALTH_CHECK_TIMEOUT_S
 ) -> tuple[bool, str | None]:
     """
-    Check daemon health via /healthz endpoint.
+    Check daemon health via /health endpoint.
 
     Returns (is_healthy, error_message).
     """
     try:
-        response = requests.get(f"http://{host}:{port}/healthz", timeout=timeout)
+        response = requests.get(f"http://{host}:{port}/health", timeout=timeout)
         if response.status_code == 200:
             data = response.json()
             if str(data.get("status", "")).lower() == "ok":
@@ -117,7 +117,7 @@ def wait_for_daemon_ready(
     host: str, port: int, timeout_s: float = DAEMON_READINESS_DEFAULT_TIMEOUT_S
 ) -> bool:
     """
-    Poll /healthz until daemon is ready or timeout.
+    Poll /health until daemon is ready or timeout.
     Uses exponential backoff for efficiency.
 
     Returns True if daemon became healthy, False if timeout.

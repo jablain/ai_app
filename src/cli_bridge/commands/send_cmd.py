@@ -104,8 +104,8 @@ def run(
                 "data": {
                     "snippet": response_data.get("snippet"),
                     "markdown": response_data.get("markdown"),
-                    "elapsed_ms": metadata.get("elapsed_ms"),
-                    "timeout_s": metadata.get("timeout_s"),
+                    # Pass through ALL metadata from daemon
+                    **metadata,  # This spreads all metadata fields into data
                 },
             }
             typer.echo(json.dumps(envelope, indent=2))

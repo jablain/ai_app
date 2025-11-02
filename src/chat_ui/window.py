@@ -116,6 +116,9 @@ class ChatWindow(Gtk.ApplicationWindow):
 
         self.set_child(main_box)
 
+        # FIX 1: Set focus to input view so user can type immediately
+        self.input_view.grab_focus()
+
     def _load_available_ais(self):
         """Populate AI dropdown from daemon (with fallback)"""
         ais = self.daemon_client.get_available_ais()
@@ -217,20 +220,21 @@ class ChatWindow(Gtk.ApplicationWindow):
             # Extract fields with fallbacks
             fields = self._extract_ai_fields(ais[key])
 
-            # Render stats on main thread
-            GLib.idle_add(self._render_stats, fields, daemon_info)
+            # Render stats on main thread - pass both fields and full AI status
+            GLib.idle_add(self._render_stats, fields, daemon_info, ais[key])
 
         except Exception as e:
             logger.exception("Error refreshing status")
             GLib.idle_add(self._render_status_error, str(e))
 
-    def _render_stats(self, fields: dict, daemon_info: dict):
+    def _render_stats(self, fields: dict, daemon_info: dict, ai_status: dict):
         """
         Render stats to display (runs on main thread)
 
         Args:
             fields: Extracted AI fields
             daemon_info: Daemon info dict
+            ai_status: Full AI status dict from daemon
         """
         # Determine connection status
         cdp_healthy = daemon_info.get("cdp_healthy", False)
@@ -252,12 +256,22 @@ class ChatWindow(Gtk.ApplicationWindow):
             "turn_count": fields["turns"],
             "message_count": fields["messages"],
             "token_count": fields["tokens_total"],
-            "sent_tokens": fields["tokens_sent"],
-            "response_tokens": fields["tokens_response"],
+            "prompt_tokens": fields["tokens_sent"],
+            "completion_tokens": fields["tokens_response"],
             "ctaw_size": fields["ctw"],
             "ctaw_usage_percent": fields["ctw_used_pct"],
             "session_duration_s": fields["session_s"],
         }
+
+        # Add performance metrics from AI status (if available)
+        if "last_response_time_ms" in ai_status:
+            metadata["last_response_time_ms"] = ai_status["last_response_time_ms"]
+        if "tokens_per_sec" in ai_status:
+            metadata["tokens_per_sec"] = ai_status["tokens_per_sec"]
+        if "avg_response_time_ms" in ai_status:
+            metadata["avg_response_time_ms"] = ai_status["avg_response_time_ms"]
+        if "avg_tokens_per_sec" in ai_status:
+            metadata["avg_tokens_per_sec"] = ai_status["avg_tokens_per_sec"]
 
         self.stats_display.update_from_metadata(metadata)
 
@@ -266,7 +280,7 @@ class ChatWindow(Gtk.ApplicationWindow):
         )
 
         return False  # Don't repeat this idle callback
-
+    
     def _render_ai_unavailable(self, daemon_info: dict):
         """Render unavailable state (runs on main thread)"""
         self.status_label.set_text(f"{self.current_ai} not available")
