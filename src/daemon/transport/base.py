@@ -11,7 +11,26 @@ from __future__ import annotations
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, List, Optional
+
+
+@dataclass
+class ChatInfo:
+    """Information about a chat session."""
+
+    chat_id: str
+    title: str
+    url: str
+    is_current: bool
+
+    def to_dict(self) -> dict[str, Any]:
+        """Convert to dictionary for API responses."""
+        return {
+            "chat_id": self.chat_id,
+            "title": self.title,
+            "url": self.url,
+            "is_current": self.is_current,
+        }
 
 
 class TransportKind(str, Enum):
@@ -213,5 +232,50 @@ class ITransport(ABC):
         - connected/session flags
         - any relevant endpoint/page info
         - model name if known
+        """
+        raise NotImplementedError
+
+    # ---------- Chat Management ----------
+
+    @abstractmethod
+    async def list_chats(self) -> List[ChatInfo]:
+        """
+        List all available chats (open tabs).
+
+        Returns:
+            List of ChatInfo objects for available chats
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def get_current_chat(self) -> ChatInfo | None:
+        """
+        Get currently active chat info.
+
+        Returns:
+            ChatInfo for current chat, or None if not available
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def switch_chat(self, chat_id: str) -> bool:
+        """
+        Switch to a specific chat by ID or URL.
+
+        Args:
+            chat_id: Chat ID, URL, or identifier
+
+        Returns:
+            True if successful, False otherwise
+        """
+        raise NotImplementedError
+
+    @abstractmethod
+    async def start_new_chat(self) -> ChatInfo | None:
+        """
+        Start a new chat and return its info.
+
+        Returns:
+            ChatInfo for new chat, or None if failed
         """
         raise NotImplementedError

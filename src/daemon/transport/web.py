@@ -4,15 +4,24 @@
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, List
 
 from playwright.async_api import Page
 from playwright.async_api import TimeoutError as PWTimeout
 
-from .base import ErrorCategory, ErrorCode, ITransport, SendResult, TransportError, TransportKind
+from .base import (
+    ChatInfo,
+    ErrorCategory,
+    ErrorCode,
+    ITransport,
+    SendResult,
+    TransportError,
+    TransportKind,
+)
 
 
 def _iso_now() -> str:
@@ -97,32 +106,43 @@ class WebTransport(ITransport):
     """
     Generic browser/CDP-based transport.
 
-    Subclasses (e.g., ClaudeWebTransport) override CSS selectors and, if needed,
-    the _get_response_count/_extract_response routines tailored to a given site.
+    Now fully selector-driven via config - no need for AI-specific subclasses.
+    Selectors are provided via the config dict during initialization.
     """
 
-    # Tunables (subclasses can override constants if desired)
-    RESPONSE_WAIT_S = 60.0
-    COMPLETION_CHECK_INTERVAL_S = 0.3
-    SNIPPET_LENGTH = 280
-
-    # Generic selectors (subclass SHOULD override to be site-specific)
-    INPUT_BOX = "div[contenteditable='true']"
-    STOP_BUTTON = "button[aria-label*='Stop']"
-    NEW_CHAT_BUTTON = "button:has-text('New chat'), a:has-text('New chat')"
-    RESPONSE_CONTAINER = "div[data-message-author-role='assistant']"
-    RESPONSE_CONTENT = ".standard-markdown"
-
-    def __init__(self, *, base_url: str, browser_pool, logger=None):
+    def __init__(self, *, config: dict[str, Any], browser_pool, logger=None):
         """
         Args:
-            base_url: target base URL (e.g. 'https://claude.ai')
+            config: Configuration dict containing:
+                - base_url: target base URL (e.g. 'https://claude.ai')
+                - selectors: dict of CSS selectors
+                - response_wait_s: timeout for response (optional)
+                - completion_check_interval_s: polling interval (optional)
+                - snippet_length: max snippet length (optional)
             browser_pool: shared BrowserConnectionPool instance
             logger: optional logger for diagnostics
         """
-        self.base_url = base_url.rstrip("/")
+        self.base_url = config.get("base_url", "").rstrip("/")
         self.browser_pool = browser_pool
         self._logger = logger
+
+        # Read selectors from config (with defaults)
+        selectors = config.get("selectors", {})
+        self.INPUT_BOX = selectors.get("input_box", "div[contenteditable='true']")
+        self.STOP_BUTTON = selectors.get("stop_button", "button[aria-label*='Stop']")
+        self.SEND_BUTTON = selectors.get("send_button", "button[aria-label='Send']")
+        self.NEW_CHAT_BUTTON = selectors.get(
+            "new_chat_button", "button:has-text('New chat'), a:has-text('New chat')"
+        )
+        self.RESPONSE_CONTAINER = selectors.get(
+            "response_container", "div[data-message-author-role='assistant']"
+        )
+        self.RESPONSE_CONTENT = selectors.get("response_content", ".standard-markdown")
+
+        # Read timing configuration from config (with defaults)
+        self.RESPONSE_WAIT_S = config.get("response_wait_s", 60.0)
+        self.COMPLETION_CHECK_INTERVAL_S = config.get("completion_check_interval_s", 0.3)
+        self.SNIPPET_LENGTH = config.get("snippet_length", 280)
 
         # Cached CDP info
         self._cdp_url: str | None = None
@@ -131,10 +151,14 @@ class WebTransport(ITransport):
         # Last used page (not strictly required, but handy for start_new_session)
         self._page: Page | None = None
 
+        # Store full config for reference
+        self._config = config
+
     # ---------- ITransport identity ----------
     @property
     def name(self) -> str:
-        return "WebTransport"
+        ai_target = self._config.get("ai_target", "unknown")
+        return f"WebTransport-{ai_target}"
 
     @property
     def kind(self) -> TransportKind:
@@ -479,24 +503,46 @@ class WebTransport(ITransport):
         return None
 
     async def _get_response_count(self, page: Page) -> int:
-        """Count response messages; subclasses can override for accuracy."""
+        """Count response messages."""
         try:
             return await page.locator(self.RESPONSE_CONTAINER).count()
         except Exception:
             return 0
 
     async def _send_message(self, page: Page, message: str) -> bool:
-        """Type the message and press Enter with a couple of fallbacks."""
+        """
+        Type the message and send it.
+
+        Tries multiple strategies:
+        1. Fill the input box (works for simple inputs)
+        2. Click + type (works for contenteditable)
+        3. Click + evaluate innerText (works for complex editors)
+        4. Press Enter to send
+        """
         try:
             box = page.locator(self.INPUT_BOX).first
             await box.wait_for(state="visible", timeout=5000)
+
+            # Try fill first
             try:
                 await box.fill(message, timeout=2000)
             except Exception:
+                # Fallback: click + type or evaluate
                 await box.click(timeout=2000)
-                await page.keyboard.type(message)
+                await asyncio.sleep(0.1)
+
+                # Try typing first
+                try:
+                    await page.keyboard.type(message)
+                except Exception:
+                    # Last resort: set innerText directly (for Quill/complex editors)
+                    await box.evaluate(f"el => el.innerText = {repr(message)}")
+                    await asyncio.sleep(0.2)
+
+            # Send the message (Enter key)
             await page.keyboard.press("Enter")
             return True
+
         except Exception as e:
             if self._logger:
                 self._logger.error(f"_send_message failed: {e}")
@@ -532,8 +578,10 @@ class WebTransport(ITransport):
         self, page: Page, baseline_count: int
     ) -> tuple[str | None, str | None]:
         """
-        Extract the latest response text (markdown/plain). Subclasses can override.
-        Default: pick the last RESPONSE_CONTENT (inner_text), fallback to last assistant bubble.
+        Extract the latest response text (markdown/plain).
+
+        Waits for new response to appear, then extracts content from the last
+        response container using the configured selectors.
         """
         try:
             # Wait briefly for DOM to attach the new content after stop disappears
@@ -545,13 +593,14 @@ class WebTransport(ITransport):
                 await page.wait_for_timeout(int(self.COMPLETION_CHECK_INTERVAL_S * 1000))
                 waited += self.COMPLETION_CHECK_INTERVAL_S
 
+            # Try to get content from the specific content selector first
             content = page.locator(self.RESPONSE_CONTENT).last
             if await content.count() > 0:
                 text = (await content.inner_text() or "").strip()
                 snippet = text[: self.SNIPPET_LENGTH]
                 return snippet, text
 
-            # Fallback: last assistant container's text
+            # Fallback: last response container's text
             last_bubble = page.locator(self.RESPONSE_CONTAINER).last
             if await last_bubble.count() > 0:
                 txt = (await last_bubble.inner_text() or "").strip()
@@ -562,3 +611,154 @@ class WebTransport(ITransport):
             if self._logger:
                 self._logger.warning(f"_extract_response failed: {e}")
             return "", ""
+
+    # ---------- Chat Management ----------
+
+    async def list_chats(self) -> List[ChatInfo]:
+        """
+        List all available chats from browser tabs.
+
+        Returns:
+            List of ChatInfo objects for matching tabs
+        """
+        try:
+            # Ensure we have connection
+            await self._get_cdp_url()
+            pages_info = await self.browser_pool.list_pages()
+
+            chats = []
+            for page_info in pages_info:
+                url = page_info.get("url", "")
+                title = page_info.get("title", "") or "Untitled"
+
+                # Check if this page matches our base URL
+                if self.base_url in url:
+                    chat_id = self._extract_chat_id_from_url(url)
+                    is_current = False  # We don't track current page in base implementation
+
+                    chats.append(
+                        ChatInfo(
+                            chat_id=chat_id or url, title=title, url=url, is_current=is_current
+                        )
+                    )
+
+            return chats
+
+        except Exception as e:
+            if self._logger:
+                self._logger.error(f"Failed to list chats: {e}")
+            return []
+
+    async def get_current_chat(self) -> ChatInfo | None:
+        """
+        Get info about currently active chat.
+
+        Returns:
+            ChatInfo for current chat, or None if not available
+        """
+        try:
+            if not self._page:
+                return None
+
+            url = self._page.url
+            title = await self._page.title() if self._page else "Untitled"
+            chat_id = self._extract_chat_id_from_url(url)
+
+            return ChatInfo(chat_id=chat_id or url, title=title, url=url, is_current=True)
+        except Exception as e:
+            if self._logger:
+                self._logger.error(f"Failed to get current chat: {e}")
+            return None
+
+    async def switch_chat(self, chat_id: str) -> bool:
+        """
+        Switch to a specific chat by ID or URL.
+
+        Args:
+            chat_id: Chat ID, URL, or identifier
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            # If it looks like a URL, navigate directly
+            if chat_id.startswith(("http://", "https://")):
+                target_url = chat_id
+            else:
+                # Assume it's a chat ID - construct URL
+                target_url = f"{self.base_url}/chat/{chat_id}"
+
+            if not self._page:
+                # Get a new page for this URL
+                ws_url, _ = await self._get_cdp_url()
+                self._page = await self._pick_page(ws_url)
+                if not self._page:
+                    return False
+
+            await self._page.goto(target_url, wait_until="domcontentloaded", timeout=15000)
+            await self._page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
+            return True
+
+        except Exception as e:
+            if self._logger:
+                self._logger.error(f"Failed to switch chat: {e}")
+            return False
+
+    async def start_new_chat(self) -> ChatInfo | None:
+        """
+        Start a new chat by clicking new chat button.
+
+        Returns:
+            ChatInfo for new chat, or None if failed
+        """
+        try:
+            if not self._page:
+                ws_url, _ = await self._get_cdp_url()
+                self._page = await self._pick_page(ws_url)
+                if not self._page:
+                    return None
+
+            # Try to click new chat button
+            new_chat_btn = self._page.locator(self.NEW_CHAT_BUTTON)
+            if await new_chat_btn.count() > 0:
+                await new_chat_btn.first.click()
+                # Wait for navigation to complete
+                await self._page.wait_for_load_state("networkidle", timeout=10000)
+
+                # Get new chat info
+                return await self.get_current_chat()
+            else:
+                # Fallback: navigate to new chat URL
+                new_chat_url = f"{self.base_url}/new"
+                await self._page.goto(new_chat_url, wait_until="domcontentloaded", timeout=15000)
+                await self._page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
+                return await self.get_current_chat()
+
+        except Exception as e:
+            if self._logger:
+                self._logger.error(f"Failed to start new chat: {e}")
+            return None
+
+    def _extract_chat_id_from_url(self, url: str) -> str:
+        """
+        Extract chat ID from URL.
+
+        Args:
+            url: Page URL
+
+        Returns:
+            Chat ID or empty string if not found
+        """
+        # Common patterns for chat URLs
+        patterns = [
+            r"/chat/([a-f0-9-]+)",  # Claude pattern
+            r"/c/([a-zA-Z0-9-]+)",  # ChatGPT pattern
+            r"/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})",  # UUID pattern
+        ]
+
+        for pattern in patterns:
+            match = re.search(pattern, url)
+            if match:
+                return match.group(1)
+
+        return ""

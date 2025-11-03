@@ -122,6 +122,23 @@ def run(
                     # Fixed formatting: only add indentation once
                     for line in snippet.splitlines():
                         typer.echo(f"    {line}")
+                # NEW: Check for context warning
+                usage = metadata.get("ctaw_usage_percent", 0)
+
+                # Display context warning if applicable
+                if usage >= 70:
+                    if usage >= 95:
+                        typer.secho(
+                            f"  ⚠️  Context: {usage:.1f}% (CRITICAL - start new chat!)",
+                            fg=typer.colors.RED,
+                        )
+                    elif usage >= 85:
+                        typer.secho(
+                            f"  ⚠️  Context: {usage:.1f}% (HIGH - consider new chat)",
+                            fg=typer.colors.YELLOW,
+                        )
+                    else:
+                        typer.secho(f"  ⚠️  Context: {usage:.1f}% (growing)", fg=typer.colors.YELLOW)
             else:
                 error_data = response_data.get("metadata", {}).get("error", {})
                 if isinstance(error_data, dict):

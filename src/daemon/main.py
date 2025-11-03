@@ -15,7 +15,7 @@ from daemon.ai.factory import AIFactory
 from daemon.browser.connection_pool import BrowserConnectionPool
 from daemon.config import load_config
 from daemon.health import HealthMonitor
-from daemon.transport import ClaudeWebTransport
+from daemon.transport import WebTransport
 
 # Configure logging
 logging.basicConfig(
@@ -141,56 +141,31 @@ async def lifespan(app: FastAPI):
             logger.error(f"Failed to create AI instances: {e}")
             raise
 
-        # Attach transports per config (Option B seam)
+        # Attach transports - NEW SIMPLIFIED PATTERN
         try:
             transports_cfg = getattr(config, "ai_transports", {}) or {}
 
-            # Claude → ClaudeWebTransport (selectors/timing tuned for Claude UI)
-            claude_mode = (transports_cfg.get("claude", "web") or "web").lower().strip()
-            if "claude" in ai_instances and claude_mode == "web":
-                try:
-                    claude_transport = ClaudeWebTransport(
-                        base_url="https://claude.ai",
-                        browser_pool=browser_pool,
-                        logger=logger,
-                    )
-                    # ClaudeAI exposes attach_transport
-                    ai_instances["claude"].attach_transport(claude_transport)  # type: ignore[attr-defined]
-                    logger.info("Attached ClaudeWebTransport to 'claude'")
-                except Exception as te:
-                    logger.warning(f"Transport attach failed for claude: {te}")
+            for ai_name, ai_instance in ai_instances.items():
+                transport_mode = (transports_cfg.get(ai_name, "web") or "web").lower().strip()
 
-            # ChatGPT → ChatGPTWebTransport
-            chatgpt_mode = (transports_cfg.get("chatgpt", "web") or "web").lower().strip()
-            if "chatgpt" in ai_instances and chatgpt_mode == "web":
-                try:
-                    from daemon.transport import ChatGPTWebTransport
+                if transport_mode == "web":
+                    try:
+                        # Get AI's config (which includes selectors)
+                        ai_config = ai_instance.get_config()
 
-                    chatgpt_transport = ChatGPTWebTransport(
-                        base_url="https://chatgpt.com",
-                        browser_pool=browser_pool,
-                        logger=logger,
-                    )
-                    ai_instances["chatgpt"].attach_transport(chatgpt_transport)  # type: ignore[attr-defined]
-                    logger.info("Attached ChatGPTWebTransport to 'chatgpt'")
-                except Exception as te:
-                    logger.error(f"Transport attach failed for chatgpt: {te}")
+                        # Create generic WebTransport with AI-specific config
+                        transport = WebTransport(
+                            config=ai_config,
+                            browser_pool=browser_pool,
+                            logger=logger,
+                        )
 
-            # Gemini → GeminiWebTransport
-            gemini_mode = (transports_cfg.get("gemini", "web") or "web").lower().strip()
-            if "gemini" in ai_instances and gemini_mode == "web":
-                try:
-                    from daemon.transport import GeminiWebTransport
+                        # Attach transport to AI instance
+                        ai_instance.attach_transport(transport)
+                        logger.info(f"✓ Attached WebTransport to '{ai_name}'")
 
-                    gemini_transport = GeminiWebTransport(
-                        base_url="https://gemini.google.com",
-                        browser_pool=browser_pool,
-                        logger=logger,
-                    )
-                    ai_instances["gemini"].attach_transport(gemini_transport)  # type: ignore[attr-defined]
-                    logger.info("Attached GeminiWebTransport to 'gemini'")
-                except Exception as te:
-                    logger.error(f"Transport attach failed for gemini: {te}")
+                    except Exception as te:
+                        logger.error(f"Transport attach failed for {ai_name}: {te}")
 
         except Exception as e:
             logger.warning(f"Transport wiring skipped due to error: {e}")
@@ -275,7 +250,7 @@ async def status():
     uptime = time.time() - daemon_state["startup_time"] if daemon_state["startup_time"] else 0
     daemon_status = {
         "version": VERSION,
-        "pid": os.getpid(),  # ← ADD THIS LINE
+        "pid": os.getpid(),
         "browser_pool_active": browser_pool is not None,
         "cdp_healthy": health_monitor.is_healthy() if health_monitor else False,
         "uptime_s": uptime,

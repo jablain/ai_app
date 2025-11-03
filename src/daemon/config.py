@@ -88,6 +88,23 @@ DEFAULT_PROFILE_DIR = BROWSER_DIR / "profiles" / "multi_ai_cdp"
 
 
 @dataclass
+class ContextWarningConfig:
+    """Context usage warning thresholds."""
+
+    yellow_threshold: int = 70  # Percentage
+    orange_threshold: int = 85
+    red_threshold: int = 95
+
+
+@dataclass
+class FeaturesConfig:
+    """Feature flags and settings."""
+
+    token_align_frequency: int = 5000
+    context_warning: ContextWarningConfig = field(default_factory=ContextWarningConfig)  # NEW
+
+
+@dataclass
 class DaemonConfig:
     """Daemon server configuration."""
 
@@ -126,13 +143,6 @@ class CDPConfig:
     probe_interval_s: float = 0.5  # Interval between startup readiness probes
     health: CDPHealthConfig = field(default_factory=CDPHealthConfig)
     start_urls: CDPStartURLs = field(default_factory=CDPStartURLs)
-
-
-@dataclass
-class FeaturesConfig:
-    """Feature flags and settings."""
-
-    token_align_frequency: int = 5000
 
 
 @dataclass
@@ -395,6 +405,33 @@ def load_config() -> AppConfig:
                     config.features.token_align_frequency = _as_int(
                         value, "features.token_align_frequency"
                     )
+                elif key == "context_warning" and isinstance(value, dict):
+                    # NEW: Load context warning thresholds
+                    warning_data = value
+                    for wkey, wval in warning_data.items():
+                        if wkey == "yellow_threshold":
+                            threshold = _as_int(wval, "features.context_warning.yellow_threshold")
+                            config.features.context_warning.yellow_threshold = (
+                                _validate_positive_int(
+                                    threshold,
+                                    "features.context_warning.yellow_threshold",
+                                    minimum=1,
+                                )
+                            )
+                        elif wkey == "orange_threshold":
+                            threshold = _as_int(wval, "features.context_warning.orange_threshold")
+                            config.features.context_warning.orange_threshold = (
+                                _validate_positive_int(
+                                    threshold,
+                                    "features.context_warning.orange_threshold",
+                                    minimum=1,
+                                )
+                            )
+                        elif wkey == "red_threshold":
+                            threshold = _as_int(wval, "features.context_warning.red_threshold")
+                            config.features.context_warning.red_threshold = _validate_positive_int(
+                                threshold, "features.context_warning.red_threshold", minimum=1
+                            )
                 elif hasattr(config.features, key):
                     setattr(config.features, key, value)
 

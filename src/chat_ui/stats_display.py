@@ -1,6 +1,8 @@
 # ruff: noqa: E402
 """Stats display widget for showing AI and token information"""
 
+import logging
+
 import gi
 
 gi.require_version("Gtk", "4.0")
@@ -9,6 +11,8 @@ from typing import Any
 from gi.repository import Gtk
 
 from chat_ui import stats_helper
+
+logger = logging.getLogger(__name__)
 
 
 class StatsDisplay(Gtk.Box):

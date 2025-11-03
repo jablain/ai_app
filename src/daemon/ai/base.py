@@ -9,7 +9,7 @@ import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any, TypedDict
+from typing import Any, Optional, TypedDict
 
 try:
     import tiktoken
@@ -221,10 +221,10 @@ class BaseAI(ABC):
     without specifying HOW they're implemented.
 
     Key Principles:
-    - No references to transport mechanisms (CDP, HTTP, WebSocket, etc.)
-    - No references to implementation details (Playwright, browsers, etc.)
-    - Only logical AI operations (send message, list messages, etc.)
-    - Session state tracking is implementation-agnostic
+    - Delegates all operations to attached transport
+    - Handles session state tracking (implementation-agnostic)
+    - Provides concrete delegation methods (no duplication in subclasses)
+    - Subclasses only need to provide configuration via get_default_config()
 
     """
 
@@ -272,108 +272,259 @@ class BaseAI(ABC):
             except Exception as e:
                 self._logger.warning(f"Failed to initialize tiktoken: {e}")
 
+        # Transport attachment (initially None)
+        self._transport: Optional[Any] = None  # ITransport, but avoid circular import
+
     # =========================
-    # Core AI Operations (Abstract Interface)
+    # Transport Management (CONCRETE - formerly in subclasses)
     # =========================
 
-    @abstractmethod
+    def attach_transport(self, transport: Any) -> None:
+        """
+        Attach a transport (web/api/mock). Safe to call once at startup.
+
+        This is now a concrete method in BaseAI - all subclasses use the same implementation.
+        """
+        self._transport = transport
+        self._logger.info(
+            f"{self.__class__.__name__}: transport attached -> {getattr(transport, 'name', 'unknown')}"
+        )
+
+    # =========================
+    # Core AI Operations (CONCRETE DELEGATION - formerly duplicated in subclasses)
+    # =========================
+
     async def send_prompt(
-        self, message: str, wait_for_response: bool = True, timeout_s: int = 120
-    ) -> tuple[bool, str | None, str | None, dict[str, Any] | None]:
+        self,
+        message: str,
+        wait_for_response: bool = True,
+        timeout_s: float = 60.0,
+        **kwargs,
+    ) -> tuple[bool, str | None, str | None, dict[str, Any]]:
         """
-        Send a message to the AI and optionally wait for response.
+        Delegate to transport; preserve BaseAI token/session accounting.
 
-        This is the primary interaction method. Subclasses implement
-        the actual transport mechanism (web automation, API call, etc.).
-
-        Args:
-            message: Text to send to the AI
-            wait_for_response: Whether to wait for AI's reply
-            timeout_s: Maximum time to wait for response
-
-        Returns:
-            Tuple of (success, snippet, full_response, metadata)
-            - success: True if message was sent (and response received if waiting)
-            - snippet: First ~280 chars of response (for display)
-            - full_response: Complete response text/markdown
-            - metadata: Dict with timing, token usage, etc.
+        This is now a concrete method in BaseAI - all subclasses use the same implementation.
         """
-        pass
+        if not self._transport:
+            meta = {
+                "error": {
+                    "code": "TRANSPORT_NOT_ATTACHED",
+                    "message": f"No transport attached to {self.__class__.__name__}.",
+                    "severity": "error",
+                    "suggested_action": "Attach a transport at startup.",
+                },
+                "waited": wait_for_response,
+                "timeout_s": timeout_s,
+            }
+            return False, None, None, meta
 
-    @abstractmethod
+        success, snippet, markdown, meta = await self._transport.send_prompt(
+            message, wait_for_response=wait_for_response, timeout_s=timeout_s
+        )
+
+        # Add BaseAI session accounting if we got any response
+        if success and (markdown or snippet):
+            try:
+                response_text = markdown or snippet or ""
+                # Extract timing from transport metadata
+                response_time_ms = meta.get("elapsed_ms")
+                session_meta = self._update_session_from_interaction(
+                    message, response_text, response_time_ms
+                )
+                for k, v in session_meta.items():
+                    meta.setdefault(k, v)
+            except Exception as e:
+                self._logger.debug(f"{self.__class__.__name__}: session accounting failed: {e}")
+
+        # Ensure timeout_s present for consistency
+        meta.setdefault("timeout_s", timeout_s)
+        return success, snippet, markdown, meta
+
     async def list_messages(self) -> list[dict[str, Any]]:
         """
-        List all messages in the current conversation.
+        Optional passthrough; many transports won't implement this.
 
-        Returns:
-            List of message dictionaries with keys:
-            - index: int (0-based)
-            - type: 'user' | 'assistant' | 'system'
-            - preview: str (first ~60 chars)
-            - length: int (character count)
+        This is now a concrete method in BaseAI - all subclasses use the same implementation.
         """
-        pass
+        try:
+            if self._transport and hasattr(self._transport, "list_messages"):
+                return await self._transport.list_messages()  # type: ignore[attr-defined]
+        except Exception as e:
+            self._logger.debug(f"{self.__class__.__name__}.list_messages passthrough failed: {e}")
+        return []
 
-    @abstractmethod
     async def extract_message(self, baseline_count: int = 0) -> dict:
         """
-        Extract the most recent assistant message since a baseline count.
+        Optional passthrough; many transports won't implement this.
 
-        Args:
-            baseline_count: Count of assistant messages before sending
-
-        Returns:
-            Dict with:
-              - snippet: short preview
-              - markdown: full extracted content
+        This is now a concrete method in BaseAI - all subclasses use the same implementation.
         """
-        pass
-        pass
+        try:
+            if self._transport and hasattr(self._transport, "extract_message"):
+                return await self._transport.extract_message(baseline_count)  # type: ignore[attr-defined]
+        except Exception as e:
+            self._logger.debug(f"{self.__class__.__name__}.extract_message passthrough failed: {e}")
+        return {"snippet": "", "markdown": ""}
 
-    @abstractmethod
     async def start_new_session(self) -> bool:
         """
-        Start a new chat session/conversation.
+        Delegate to transport if supported.
 
-        This resets the conversation history in the AI interface
-        and resets local session state tracking.
+        This is now a concrete method in BaseAI - all subclasses use the same implementation.
+        """
+        try:
+            if self._transport and hasattr(self._transport, "start_new_session"):
+                success = await self._transport.start_new_session()  # type: ignore[attr-defined]
+                if success:
+                    # Reset session state when starting new session
+                    self._reset_session_state()
+                return success
+        except Exception as e:
+            self._logger.debug(
+                f"{self.__class__.__name__}.start_new_session passthrough failed: {e}"
+            )
+        # Not fatal if transport doesn't support it
+        return True
+
+    # =========================
+    # Chat Management (CONCRETE DELEGATION - NEW)
+    # =========================
+
+    async def list_chats(self) -> list[dict[str, Any]]:
+        """
+        List all available chats (delegate to transport).
 
         Returns:
-            True if new session started successfully
+            List of chat dictionaries with id, title, url, is_current
         """
-        pass
+        try:
+            if self._transport and hasattr(self._transport, "list_chats"):
+                chat_infos = await self._transport.list_chats()  # type: ignore[attr-defined]
+                # Convert ChatInfo objects to dicts
+                return [chat.to_dict() for chat in chat_infos]
+        except Exception as e:
+            self._logger.debug(f"{self.__class__.__name__}.list_chats failed: {e}")
+        return []
 
-    @abstractmethod
+    async def get_current_chat(self) -> dict[str, Any] | None:
+        """
+        Get current chat info (delegate to transport).
+
+        Returns:
+            Dictionary with current chat info, or None if not available
+        """
+        try:
+            if self._transport and hasattr(self._transport, "get_current_chat"):
+                chat_info = await self._transport.get_current_chat()  # type: ignore[attr-defined]
+                # Convert ChatInfo to dict
+                return chat_info.to_dict() if chat_info else None
+        except Exception as e:
+            self._logger.debug(f"{self.__class__.__name__}.get_current_chat failed: {e}")
+        return None
+
+    async def switch_chat(self, chat_id: str) -> bool:
+        """
+        Switch to specific chat (delegate to transport).
+
+        Args:
+            chat_id: Chat identifier (ID, URL, or index)
+
+        Returns:
+            True if successful, False otherwise
+        """
+        try:
+            if self._transport and hasattr(self._transport, "switch_chat"):
+                success = await self._transport.switch_chat(chat_id)  # type: ignore[attr-defined]
+                if success:
+                    # Reset session state when switching chats
+                    self._reset_session_state()
+                return success
+        except Exception as e:
+            self._logger.debug(f"{self.__class__.__name__}.switch_chat failed: {e}")
+        return False
+
+    async def start_new_chat(self) -> dict[str, Any] | None:
+        """
+        Start new chat (delegate to transport).
+
+        Returns:
+            Dictionary with new chat info, or None if failed
+        """
+        try:
+            if self._transport and hasattr(self._transport, "start_new_chat"):
+                chat_info = await self._transport.start_new_chat()  # type: ignore[attr-defined]
+                if chat_info:
+                    # Reset session state for new chat
+                    self._reset_session_state()
+                    # Convert ChatInfo to dict
+                    return chat_info.to_dict()
+        except Exception as e:
+            self._logger.debug(f"{self.__class__.__name__}.start_new_chat failed: {e}")
+        return None
+
+    # =========================
+    # Transport Status (CONCRETE - formerly in subclasses)
+    # =========================
+
     def get_transport_status(self) -> dict[str, Any]:
         """
-        Get transport/connection status.
+        Return transport-layer status (for /status endpoint wiring).
 
-        This is implementation-specific (web has CDP info, API has endpoint info).
-        Subclasses must implement this to provide transport-layer details.
-
-        Returns:
-            Dictionary with transport-specific status information
+        This is now a concrete method in BaseAI - all subclasses use the same implementation.
         """
-        pass
+        if not self._transport:
+            return {
+                "attached": False,
+                "name": None,
+                "kind": None,
+                "connected": False,
+            }
+
+        t = self._transport
+        status: dict[str, Any] = {
+            "attached": True,
+            "name": getattr(t, "name", "unknown"),
+            "kind": getattr(getattr(t, "kind", None), "value", None),
+        }
+
+        # Get detailed transport status
+        if hasattr(t, "get_status"):
+            try:
+                transport_status = t.get_status()  # type: ignore[attr-defined]
+                status["status"] = transport_status
+
+                # Add connected flag based on transport status
+                # For WebTransport, check if we have a page
+                if hasattr(t, "_page") and t._page is not None:
+                    status["connected"] = True
+                else:
+                    status["connected"] = False
+
+            except Exception as e:
+                status["status"] = {"error": f"transport_status_unavailable: {e}"}
+                status["connected"] = False
+        else:
+            status["connected"] = False
+
+        return status
 
     # =========================
     # AI Status (Concrete Implementation)
     # =========================
 
-    def get_ai_status(self) -> AIStatus:
+    def get_ai_status(self) -> dict[str, Any]:
         """
         Get AI session status (implementation-agnostic).
 
-        Returns universal AI metrics that apply regardless of
-        transport mechanism (web, API, etc.).
-
-        Returns:
-            Dictionary with AI session information
+        Extends base session status with transport info.
         """
-        return {
+        base = {
             "ai_target": self.get_ai_target(),
             **self._session.to_dict(),
         }
+        base["transport"] = self.get_transport_status()
+        return base
 
     def get_ai_target(self) -> str:
         """Get the AI target name (e.g., 'claude', 'chatgpt')."""
@@ -478,7 +629,7 @@ class BaseAI(ABC):
         return self._config
 
     # =========================
-    # Class-level Configuration
+    # Class-level Configuration (ABSTRACT - subclasses must implement)
     # =========================
 
     @classmethod
@@ -487,7 +638,13 @@ class BaseAI(ABC):
         """
         Get default configuration for this AI implementation.
 
+        Subclasses MUST implement this to provide:
+        - ai_target: AI identifier
+        - max_context_tokens: Context window size
+        - base_url: Web URL for the AI
+        - selectors: Dict of CSS selectors for web automation
+
         Returns:
-            Dict with ai_target, max_context_tokens, and implementation-specific settings
+            Dict with ai_target, max_context_tokens, base_url, selectors, and other settings
         """
         pass

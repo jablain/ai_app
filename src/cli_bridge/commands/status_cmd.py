@@ -48,41 +48,97 @@ def _print_human_status(full_status: dict[str, Any], ai_name: str | None) -> int
 
     def render_ai(k: str, v: dict[str, Any]) -> None:
         typer.echo(f"[{k}]")
-        typer.echo(f"  Transport:         {v.get('transport_type', 'unknown')}")
-        typer.echo(f"  Connected:         {bool(v.get('connected'))}")
-        if v.get("cdp_source"):
-            typer.echo(f"  CDP Source:        {v.get('cdp_source')}")
-        if v.get("cdp_url"):
-            typer.echo(f"  CDP URL:           {v.get('cdp_url')}")
-        if v.get("last_page_url"):
-            typer.echo(f"  Page URL:          {v.get('last_page_url')}")
-        # Domain/session metrics from BaseAI
+
+        # Transport information (new structure)
+        transport = v.get("transport", {})
+        if isinstance(transport, dict):
+            transport_name = transport.get("name", "unknown")
+            transport_kind = transport.get("kind", "unknown")
+            connected = transport.get("connected", False)
+
+            # Display transport info
+            typer.echo(f"  Transport:         {transport_name}")
+            typer.echo(f"  Type:              {transport_kind}")
+
+            # Connected status with color
+            if connected:
+                typer.secho("  Connected:         True", fg=typer.colors.GREEN)
+            else:
+                typer.secho("  Connected:         False", fg=typer.colors.YELLOW)
+
+            # Additional transport details if available
+            transport_status = transport.get("status", {})
+            if isinstance(transport_status, dict):
+                if "base_url" in transport_status:
+                    typer.echo(f"  Base URL:          {transport_status['base_url']}")
+                if "cdp_origin" in transport_status:
+                    typer.echo(f"  CDP Origin:        {transport_status['cdp_origin']}")
+        else:
+            # Fallback for old format
+            typer.echo(f"  Transport:         {transport if transport else 'unknown'}")
+            typer.echo("  Connected:         False")
+
+        # Session metrics from BaseAI
         if "message_count" in v:
             typer.echo(f"  Message Count:     {v.get('message_count')}")
+
         if "session_duration_s" in v:
             try:
                 dur = float(v.get("session_duration_s") or 0.0)
                 typer.echo(f"  Session Duration:  {dur:.1f}s")
             except Exception:
                 pass
-        if "ctaw_size" in v or "context_window_tokens" in v:
-            # Show whichever field exists (v2 currently exposes ctaw_size)
-            ctw = v.get("context_window_tokens", v.get("ctaw_size"))
-            typer.echo(f"  Context Window:    {ctw} tokens")
+
+        # Context window information
+        if "ctaw_size" in v:
+            ctw = v.get("ctaw_size")
+            typer.echo(f"  Context Window:    {ctw:,} tokens")
+
+        # Context usage with color coding
         if "ctaw_usage_percent" in v:
-            typer.echo(f"  Context Used:      {v.get('ctaw_usage_percent')}%")
+            usage = v.get("ctaw_usage_percent", 0)
+            usage_str = f"  Context Used:      {usage}%"
+
+            # Color code based on usage
+            if usage >= 95:
+                typer.secho(usage_str, fg=typer.colors.RED)
+            elif usage >= 85:
+                typer.secho(usage_str, fg=typer.colors.YELLOW)
+            elif usage >= 70:
+                typer.secho(usage_str, fg=typer.colors.YELLOW)
+            else:
+                typer.echo(usage_str)
+
+        # Token breakdown if available
+        if "sent_tokens" in v and "response_tokens" in v:
+            sent = v.get("sent_tokens", 0)
+            received = v.get("response_tokens", 0)
+            typer.echo(f"  Tokens Sent:       {sent:,}")
+            typer.echo(f"  Tokens Received:   {received:,}")
+
+        # Performance metrics if available
+        if "avg_response_time_ms" in v and v.get("avg_response_time_ms"):
+            avg_time = v.get("avg_response_time_ms")
+            typer.echo(f"  Avg Response:      {avg_time:.0f}ms")
+
+        if "tokens_per_sec" in v and v.get("tokens_per_sec"):
+            tps = v.get("tokens_per_sec")
+            typer.echo(f"  Tokens/sec:        {tps:.1f}")
+
+        # Error information
         error_data = v.get("error")
         if isinstance(error_data, dict):
             # New structured error
             msg = error_data.get("message", "Unknown error")
-            typer.secho(f"  Error:             {msg}", fg=typer.colors.YELLOW)
+            typer.secho(f"  Error:             {msg}", fg=typer.colors.RED)
             if error_data.get("user_action"):
                 typer.secho(
-                    f"  Suggested Action:   {error_data['user_action']}", fg=typer.colors.YELLOW
+                    f"  Suggested Action:  {error_data['user_action']}", fg=typer.colors.YELLOW
                 )
         elif error_data:
             # Old error (string) or unexpected format
-            typer.secho(f"  Error:             {error_data}", fg=typer.colors.YELLOW)
+            typer.secho(f"  Error:             {error_data}", fg=typer.colors.RED)
+
         typer.echo("")
 
     # Render one or all
@@ -159,7 +215,7 @@ def run(host: str, port: int, ai_name: str, json_out: bool = False) -> int:
 
     except requests.exceptions.ConnectionError:
         typer.echo("✗ Daemon not running")
-        typer.echo("  Start it with: aicli daemon start")
+        typer.echo("  Start it with: ai-cli-bridge daemon start")
         return DaemonNotRunning.exit_code
 
     except requests.exceptions.HTTPError as e:

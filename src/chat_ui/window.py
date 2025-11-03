@@ -280,7 +280,7 @@ class ChatWindow(Gtk.ApplicationWindow):
         )
 
         return False  # Don't repeat this idle callback
-    
+
     def _render_ai_unavailable(self, daemon_info: dict):
         """Render unavailable state (runs on main thread)"""
         self.status_label.set_text(f"{self.current_ai} not available")
