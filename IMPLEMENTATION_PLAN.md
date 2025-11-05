@@ -216,26 +216,31 @@ def update_context_display(self, usage_percent: float, thresholds: dict):
 
 ---
 
-## Feature #2: Chat Management
+## Feature #2: Chat Management (Full Web UI History Management)
 
-### Status: 40% Complete (Foundation Exists)
+### Status: 15% Complete (Minimal Foundation - Major Rework Needed)
 
 ### Requirements
 
+**Purpose:** Manage all chats in each AI's web interface history (sidebar) through CLI/UI commands.
+
 **Commands:**
-- `chats new <ai>` - Start new chat
-- `chats list <ai>` - List open chats
-- `chats switch <ai> <id|url|index>` - Switch to specific chat
+- `chats new <ai>` - Create a new chat
+- `chats list <ai>` - List all chats from history sidebar
+- `chats switch <ai> <id|title|index>` - Switch to any chat in history
+- `chats delete <ai> <id|title|index>` - Delete a chat from history
+- `chats rename <ai> <id|title|index> <new-title>` - Rename a chat
 
 **Features:**
-- List Display: Active marker, index #, title (scraped from DOM)
-- Identification: Support chat-id, full URL, or list index
-- Storage: No persistent database, open browser tabs only
-- Status: Include current_chat_id and current_chat_url in AI status
+- List Display: Active marker, index #, title, creation date (if available)
+- Identification: Support chat-id, title substring match, or list index
+- Source: Scrape from AI's web UI sidebar (Claude's left panel, ChatGPT's sidebar, etc.)
+- Storage: No local persistence - all operations interact with the AI's web interface
+- Status: Include current_chat_id, current_chat_url, and current_chat_title in AI status
 
 ### What's Already Implemented
 
-✅ **Type Definitions** (`src/daemon/chats/types.py`)
+⚠️ **Type Definitions** (`src/daemon/chats/types.py`)
 ```python
 @dataclass
 class ChatInfo:
@@ -243,28 +248,347 @@ class ChatInfo:
     title: str
     url: str
     is_current: bool
+    # NEEDS: created_at, last_updated (optional)
 ```
 
-✅ **Transport Layer** (`src/daemon/transport/base.py:231-257`)
+⚠️ **Transport Layer Signatures** (`src/daemon/transport/base.py:231-257`)
 ```python
-async def list_chats(self) -> List[ChatInfo]: ...
-async def get_current_chat(self) -> ChatInfo | None: ...
-async def switch_chat(self, chat_id: str) -> bool: ...
+async def list_chats(self) -> List[ChatInfo]: ...  # EXISTS but limited
+async def get_current_chat(self) -> ChatInfo | None: ...  # EXISTS
+async def switch_chat(self, chat_id: str) -> bool: ...  # EXISTS
+# MISSING: delete_chat, rename_chat
 ```
 
-✅ **Web Transport Implementation** (`src/daemon/transport/web.py:607-740`)
-- Chat listing from browser tabs
-- Current chat detection
-- Chat switching by ID/URL
-- Title scraping from DOM
+⚠️ **Web Transport Implementation** (`src/daemon/transport/web.py:607-740`)
+- Chat listing from browser tabs (NOT from sidebar history - needs update)
+- Current chat detection (EXISTS)
+- Chat switching by ID/URL (EXISTS but may need sidebar interaction)
+- Title scraping from DOM (basic, needs enhancement)
+- **MISSING:** Sidebar scraping, delete operation, rename operation
 
-✅ **AI Base Class Delegation** (`src/daemon/ai/base.py:374-420`)
-- Methods delegate to transport layer
-- Error handling in place
+⚠️ **AI Base Class Delegation** (`src/daemon/ai/base.py:374-420`)
+- Partial delegation for list/switch/get_current
+- **MISSING:** delete_chat, rename_chat delegation
 
 ### Remaining Work
 
-❌ **1. Create CLI Command Module**
+❌ **1. Update ChatInfo Type to Include Metadata**
+
+**File:** `src/daemon/chats/types.py`
+
+**Enhancement:**
+```python
+@dataclass
+class ChatInfo:
+    chat_id: str
+    title: str
+    url: str
+    is_current: bool
+    created_at: str | None = None  # ISO timestamp if available
+    last_updated: str | None = None  # ISO timestamp if available
+```
+
+**Effort:** 5 minutes  
+**Risk:** None
+
+---
+
+❌ **2. Add Sidebar Scraping to Web Transport**
+
+**File:** `src/daemon/transport/web.py`
+
+**New Method:** Scrape all chats from sidebar (not just open tabs)
+
+```python
+async def list_all_chats_from_sidebar(self) -> List[ChatInfo]:
+    """
+    Scrape all chats from the AI's sidebar/history panel.
+    
+    This replaces the current list_chats() which only looks at browser tabs.
+    Each AI has different sidebar structure:
+    - Claude: Left sidebar with conversation list
+    - ChatGPT: Left sidebar with chat history
+    - Gemini: Left panel with recent chats
+    
+    Returns:
+        List of ChatInfo objects from sidebar
+    """
+    page = await self._browser_pool.get_page()
+    
+    # Get AI-specific sidebar selector from config
+    sidebar_selector = self._config.get("selectors", {}).get("chat_sidebar", "")
+    chat_item_selector = self._config.get("selectors", {}).get("chat_item", "")
+    
+    if not sidebar_selector or not chat_item_selector:
+        raise ValueError(f"Missing sidebar selectors for {self._config.get('ai_target')}")
+    
+    # Wait for sidebar to load
+    await page.wait_for_selector(sidebar_selector, timeout=5000)
+    
+    # Find all chat items in sidebar
+    chat_elements = await page.query_selector_all(chat_item_selector)
+    
+    chats = []
+    current_url = page.url
+    
+    for idx, elem in enumerate(chat_elements):
+        try:
+            # Extract title (varies by AI)
+            title = await self._extract_chat_title(elem)
+            
+            # Extract URL (click target or href)
+            url = await self._extract_chat_url(elem)
+            
+            # Extract chat ID from URL
+            chat_id = self._parse_chat_id_from_url(url)
+            
+            # Check if this is the current chat
+            is_current = (url == current_url) or await self._is_active_chat(elem)
+            
+            chats.append({
+                "chat_id": chat_id,
+                "title": title,
+                "url": url,
+                "is_current": is_current
+            })
+        except Exception as e:
+            self._logger.warning(f"Failed to extract chat {idx}: {e}")
+            continue
+    
+    return chats
+```
+
+**Helper Methods Needed:**
+```python
+async def _extract_chat_title(self, element) -> str:
+    """Extract title from chat element (AI-specific)."""
+    # Implement per-AI logic
+    
+async def _extract_chat_url(self, element) -> str:
+    """Extract URL from chat element."""
+    # Try href, data-url, or build from chat ID
+    
+async def _is_active_chat(self, element) -> bool:
+    """Check if element has active/selected class."""
+    # Check for "active", "selected" class or aria-selected
+```
+
+**Effort:** 4-6 hours (complex, per-AI customization needed)  
+**Risk:** High (DOM structure varies per AI, may break with UI updates)
+
+---
+
+❌ **3. Add Delete Chat Method to Web Transport**
+
+**File:** `src/daemon/transport/web.py`
+
+**New Method:**
+```python
+async def delete_chat(self, chat_id: str) -> bool:
+    """
+    Delete a chat by clicking the delete button in the sidebar.
+    
+    Steps:
+    1. Find chat in sidebar by chat_id
+    2. Hover to reveal delete button (if needed)
+    3. Click delete button
+    4. Confirm deletion in modal (if needed)
+    
+    Args:
+        chat_id: Chat identifier
+        
+    Returns:
+        True if deleted successfully
+    """
+    page = await self._browser_pool.get_page()
+    
+    # Find the chat element in sidebar
+    chat_element = await self._find_chat_in_sidebar(chat_id)
+    if not chat_element:
+        raise ValueError(f"Chat {chat_id} not found in sidebar")
+    
+    # Hover to reveal delete button (some UIs hide it)
+    await chat_element.hover()
+    
+    # Get AI-specific delete button selector
+    delete_selector = self._config.get("selectors", {}).get("chat_delete_button", "")
+    
+    # Find delete button within chat element
+    delete_button = await chat_element.query_selector(delete_selector)
+    if not delete_button:
+        raise ValueError("Delete button not found")
+    
+    # Click delete
+    await delete_button.click()
+    
+    # Handle confirmation modal (if exists)
+    confirm_selector = self._config.get("selectors", {}).get("delete_confirm_button", "")
+    if confirm_selector:
+        try:
+            confirm_button = await page.wait_for_selector(confirm_selector, timeout=2000)
+            await confirm_button.click()
+        except Exception:
+            pass  # No modal needed
+    
+    # Wait a moment for deletion to complete
+    await page.wait_for_timeout(500)
+    
+    return True
+```
+
+**Helper Method:**
+```python
+async def _find_chat_in_sidebar(self, chat_id: str):
+    """Find chat element in sidebar by chat_id."""
+    # Scrape sidebar and find matching element
+```
+
+**Effort:** 3-4 hours (per-AI customization needed)  
+**Risk:** High (UI interaction can be fragile)
+
+---
+
+❌ **4. Add Rename Chat Method to Web Transport**
+
+**File:** `src/daemon/transport/web.py`
+
+**New Method:**
+```python
+async def rename_chat(self, chat_id: str, new_title: str) -> bool:
+    """
+    Rename a chat by interacting with the rename UI.
+    
+    Steps:
+    1. Find chat in sidebar by chat_id
+    2. Click rename button or double-click title (varies by AI)
+    3. Type new title
+    4. Confirm (Enter key or click confirm button)
+    
+    Args:
+        chat_id: Chat identifier
+        new_title: New chat title
+        
+    Returns:
+        True if renamed successfully
+    """
+    page = await self._browser_pool.get_page()
+    
+    # Find the chat element in sidebar
+    chat_element = await self._find_chat_in_sidebar(chat_id)
+    if not chat_element:
+        raise ValueError(f"Chat {chat_id} not found in sidebar")
+    
+    # Hover to reveal rename button (if needed)
+    await chat_element.hover()
+    
+    # Get AI-specific rename trigger selector
+    rename_selector = self._config.get("selectors", {}).get("chat_rename_button", "")
+    
+    if rename_selector:
+        # Click rename button
+        rename_button = await chat_element.query_selector(rename_selector)
+        if rename_button:
+            await rename_button.click()
+    else:
+        # Some AIs use double-click on title
+        title_elem = await chat_element.query_selector(
+            self._config.get("selectors", {}).get("chat_title", "")
+        )
+        if title_elem:
+            await title_elem.dblclick()
+    
+    # Wait for input field to appear
+    input_selector = self._config.get("selectors", {}).get("chat_rename_input", "input")
+    input_field = await page.wait_for_selector(input_selector, timeout=2000)
+    
+    # Clear and type new title
+    await input_field.click(click_count=3)  # Select all
+    await input_field.type(new_title)
+    
+    # Confirm (usually Enter key)
+    await input_field.press("Enter")
+    
+    # Wait for rename to complete
+    await page.wait_for_timeout(500)
+    
+    return True
+```
+
+**Effort:** 3-4 hours (per-AI customization needed)  
+**Risk:** High (rename UI varies significantly per AI)
+
+---
+
+❌ **5. Update AI Config with Sidebar Selectors**
+
+**Files:** `src/daemon/ai/claude.py`, `src/daemon/ai/chatgpt.py`, `src/daemon/ai/gemini.py`
+
+**Add to each AI's get_default_config():**
+```python
+"selectors": {
+    # Existing selectors...
+    "chat_sidebar": "div.sidebar-chat-list",  # Sidebar container
+    "chat_item": "div.chat-item",  # Individual chat element
+    "chat_title": "span.chat-title",  # Title element within chat item
+    "chat_delete_button": "button[aria-label='Delete']",  # Delete button
+    "chat_rename_button": "button[aria-label='Rename']",  # Rename button
+    "chat_rename_input": "input[name='chat-title']",  # Rename input field
+    "delete_confirm_button": "button:has-text('Delete')",  # Confirm modal
+},
+```
+
+**Note:** Each AI will have different selectors - need to inspect each UI.
+
+**Effort:** 2-3 hours (manual inspection and testing per AI)  
+**Risk:** Medium (selectors can change with UI updates)
+
+---
+
+❌ **6. Add Transport Layer Method Signatures**
+
+**File:** `src/daemon/transport/base.py`
+
+**Add methods:**
+```python
+async def delete_chat(self, chat_id: str) -> bool:
+    """Delete a chat from history. To be implemented by transports."""
+    raise NotImplementedError()
+
+async def rename_chat(self, chat_id: str, new_title: str) -> bool:
+    """Rename a chat. To be implemented by transports."""
+    raise NotImplementedError()
+```
+
+**Effort:** 5 minutes  
+**Risk:** None
+
+---
+
+❌ **7. Add AI Base Class Delegation**
+
+**File:** `src/daemon/ai/base.py`
+
+**Add methods:**
+```python
+async def delete_chat(self, chat_id: str) -> bool:
+    """Delete a chat via transport."""
+    if self._transport and hasattr(self._transport, "delete_chat"):
+        return await self._transport.delete_chat(chat_id)
+    return False
+
+async def rename_chat(self, chat_id: str, new_title: str) -> bool:
+    """Rename a chat via transport."""
+    if self._transport and hasattr(self._transport, "rename_chat"):
+        return await self._transport.rename_chat(chat_id, new_title)
+    return False
+```
+
+**Effort:** 10 minutes  
+**Risk:** None
+
+---
+
+❌ **8. Create CLI Command Module**
 
 **File:** `src/cli_bridge/commands/chats_cmd.py` (NEW)
 
@@ -367,7 +691,7 @@ def list_chats(
 @app.command("switch")
 def switch_chat(
     ai: str = typer.Argument(..., help="AI name (claude, chatgpt, gemini)"),
-    identifier: str = typer.Argument(..., help="Chat ID, URL, or list index"),
+    identifier: str = typer.Argument(..., help="Chat ID, title, or list index"),
     host: str = "127.0.0.1",
     port: int = 8000,
 ):
@@ -393,14 +717,79 @@ def switch_chat(
     except requests.exceptions.ConnectionError:
         typer.secho("✗ Cannot connect to daemon", fg=typer.colors.RED)
         raise typer.Exit(DaemonNotRunning.exit_code)
+
+
+@app.command("delete")
+def delete_chat(
+    ai: str = typer.Argument(..., help="AI name (claude, chatgpt, gemini)"),
+    identifier: str = typer.Argument(..., help="Chat ID, title, or list index"),
+    host: str = "127.0.0.1",
+    port: int = 8000,
+    force: bool = typer.Option(False, "--force", "-f", help="Skip confirmation"),
+):
+    """Delete a chat from history."""
+    # Confirm deletion unless --force
+    if not force:
+        confirm = typer.confirm(f"Delete chat '{identifier}' from {ai}?")
+        if not confirm:
+            typer.echo("Cancelled")
+            raise typer.Exit(0)
+    
+    try:
+        response = requests.post(
+            f"http://{host}:{port}/chats/delete",
+            json={"ai": ai, "identifier": identifier},
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("success"):
+            typer.secho(f"✓ Chat deleted", fg=typer.colors.GREEN)
+        else:
+            typer.secho(f"✗ Failed: {data.get('error')}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+            
+    except requests.exceptions.ConnectionError:
+        typer.secho("✗ Cannot connect to daemon", fg=typer.colors.RED)
+        raise typer.Exit(DaemonNotRunning.exit_code)
+
+
+@app.command("rename")
+def rename_chat(
+    ai: str = typer.Argument(..., help="AI name (claude, chatgpt, gemini)"),
+    identifier: str = typer.Argument(..., help="Chat ID, title, or list index"),
+    new_title: str = typer.Argument(..., help="New chat title"),
+    host: str = "127.0.0.1",
+    port: int = 8000,
+):
+    """Rename a chat."""
+    try:
+        response = requests.post(
+            f"http://{host}:{port}/chats/rename",
+            json={"ai": ai, "identifier": identifier, "new_title": new_title},
+            timeout=10
+        )
+        response.raise_for_status()
+        data = response.json()
+        
+        if data.get("success"):
+            typer.secho(f"✓ Chat renamed to '{new_title}'", fg=typer.colors.GREEN)
+        else:
+            typer.secho(f"✗ Failed: {data.get('error')}", fg=typer.colors.RED)
+            raise typer.Exit(1)
+            
+    except requests.exceptions.ConnectionError:
+        typer.secho("✗ Cannot connect to daemon", fg=typer.colors.RED)
+        raise typer.Exit(DaemonNotRunning.exit_code)
 ```
 
-**Effort:** 2-3 hours  
+**Effort:** 3-4 hours  
 **Risk:** Low (follows existing command patterns)
 
 ---
 
-❌ **2. Register Command Group in CLI**
+❌ **9. Register Command Group in CLI**
 
 **File:** `src/cli_bridge/cli.py`
 
@@ -418,7 +807,7 @@ app.add_typer(chats_cmd.app, name="chats")
 
 ---
 
-❌ **3. Add Daemon API Endpoints**
+❌ **10. Add Daemon API Endpoints**
 
 **File:** `src/daemon/main.py`
 
@@ -437,7 +826,20 @@ class ChatsNewRequest(BaseModel):
 class ChatsSwitchRequest(BaseModel):
     """Request model for switching chats."""
     ai: str = Field(..., description="AI target name")
-    identifier: str = Field(..., description="Chat ID, URL, or index")
+    identifier: str = Field(..., description="Chat ID, title, or index")
+
+
+class ChatsDeleteRequest(BaseModel):
+    """Request model for deleting a chat."""
+    ai: str = Field(..., description="AI target name")
+    identifier: str = Field(..., description="Chat ID, title, or index")
+
+
+class ChatsRenameRequest(BaseModel):
+    """Request model for renaming a chat."""
+    ai: str = Field(..., description="AI target name")
+    identifier: str = Field(..., description="Chat ID, title, or index")
+    new_title: str = Field(..., description="New chat title")
 
 
 class ChatsResponse(BaseModel):
@@ -553,14 +955,76 @@ async def switch_chat(request: ChatsSwitchRequest):
             success=False,
             error=str(e)
         )
+
+
+@app.post("/chats/delete", response_model=ChatsResponse)
+async def delete_chat(request: ChatsDeleteRequest):
+    """Delete a chat from history."""
+    ai_instances = daemon_state["ai_instances"]
+    
+    if request.ai not in ai_instances:
+        return ChatsResponse(
+            success=False,
+            error=f"Unknown AI: {request.ai}"
+        )
+    
+    try:
+        ai_instance = ai_instances[request.ai]
+        success = await ai_instance.delete_chat(request.identifier)
+        
+        if success:
+            return ChatsResponse(success=True)
+        else:
+            return ChatsResponse(
+                success=False,
+                error="Failed to delete chat"
+            )
+            
+    except Exception as e:
+        logger.error(f"Failed to delete chat for {request.ai}: {e}")
+        return ChatsResponse(
+            success=False,
+            error=str(e)
+        )
+
+
+@app.post("/chats/rename", response_model=ChatsResponse)
+async def rename_chat(request: ChatsRenameRequest):
+    """Rename a chat."""
+    ai_instances = daemon_state["ai_instances"]
+    
+    if request.ai not in ai_instances:
+        return ChatsResponse(
+            success=False,
+            error=f"Unknown AI: {request.ai}"
+        )
+    
+    try:
+        ai_instance = ai_instances[request.ai]
+        success = await ai_instance.rename_chat(request.identifier, request.new_title)
+        
+        if success:
+            return ChatsResponse(success=True)
+        else:
+            return ChatsResponse(
+                success=False,
+                error="Failed to rename chat"
+            )
+            
+    except Exception as e:
+        logger.error(f"Failed to rename chat for {request.ai}: {e}")
+        return ChatsResponse(
+            success=False,
+            error=str(e)
+        )
 ```
 
-**Effort:** 2-3 hours  
+**Effort:** 4-5 hours  
 **Risk:** Medium (needs testing with actual browser)
 
 ---
 
-❌ **4. Enhance Status Endpoint**
+❌ **11. Enhance Status Endpoint**
 
 **File:** `src/daemon/main.py`
 
@@ -595,26 +1059,34 @@ for name, instance in ai_instances.items():
 ### Testing Checklist
 
 - [ ] `chats new claude` creates new chat
-- [ ] `chats list claude` shows all tabs
+- [ ] `chats list claude` shows all chats from sidebar history (not just tabs)
 - [ ] Active chat marked with ●
 - [ ] `chats switch claude 0` works (by index)
 - [ ] `chats switch claude <chat-id>` works
-- [ ] `chats switch claude https://...` works (by URL)
-- [ ] Status shows current chat info
+- [ ] `chats switch claude "My Chat"` works (by title substring)
+- [ ] `chats delete claude 0` deletes chat with confirmation
+- [ ] `chats delete claude 0 --force` deletes without confirmation
+- [ ] `chats rename claude 0 "New Name"` renames chat
+- [ ] Status shows current chat info (id, url, title)
 - [ ] Works for all AIs (claude, chatgpt, gemini)
 - [ ] Error handling for invalid AI names
 - [ ] Error handling for invalid chat identifiers
+- [ ] Sidebar scraping works reliably
+- [ ] Delete/rename UI interactions work correctly
 
 ### Completion Criteria
 
-- ✅ Transport layer methods
-- ✅ Type definitions
-- ❌ CLI commands
-- ❌ Daemon endpoints
+- ⚠️ Transport layer methods (partial - needs sidebar scraping, delete, rename)
+- ⚠️ Type definitions (needs metadata fields)
+- ❌ Sidebar scraping implementation
+- ❌ Delete/rename implementations
+- ❌ AI config selector updates
+- ❌ CLI commands (all 5 commands)
+- ❌ Daemon endpoints (all 5 endpoints)
 - ❌ Status integration
 - ❌ Tests
 
-**Estimated Time to Complete:** 6-8 hours
+**Estimated Time to Complete:** 18-22 hours (significantly increased due to sidebar scraping complexity)
 
 ---
 
