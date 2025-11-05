@@ -273,6 +273,18 @@ class ChatWindow(Gtk.ApplicationWindow):
         if "avg_tokens_per_sec" in ai_status:
             metadata["avg_tokens_per_sec"] = ai_status["avg_tokens_per_sec"]
 
+        # Update context warning thresholds from daemon config (if available)
+        thresholds = daemon_info.get("context_warning_thresholds", {})
+        if thresholds:
+            logger.debug(f"Updating context warning thresholds: {thresholds}")
+            self.stats_display.set_context_warning_thresholds(
+                yellow=thresholds.get("yellow", 70),
+                orange=thresholds.get("orange", 85),
+                red=thresholds.get("red", 95),
+            )
+        else:
+            logger.warning("No context_warning_thresholds in daemon status response")
+
         self.stats_display.update_from_metadata(metadata)
 
         logger.debug(
