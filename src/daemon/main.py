@@ -255,6 +255,13 @@ async def status():
         "cdp_healthy": health_monitor.is_healthy() if health_monitor else False,
         "uptime_s": uptime,
         "configured_ai_transports": getattr(cfg, "ai_transports", {}) if cfg else {},
+        "context_warning_thresholds": {
+            "yellow": cfg.features.context_warning.yellow_threshold,
+            "orange": cfg.features.context_warning.orange_threshold,
+            "red": cfg.features.context_warning.red_threshold,
+        }
+        if cfg
+        else {},
     }
 
     ai_statuses = {}
