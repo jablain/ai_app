@@ -52,6 +52,13 @@ class GeminiAI(BaseAI):
                 "new_chat_button": "button:has-text('New chat'), a:has-text('New chat')",
                 "response_container": "message-content",
                 "response_content": "div.markdown.markdown-main-panel",
+                # Chat management selectors
+                "chat_sidebar": "conversations-list[data-test-id='all-conversations']",
+                "chat_item": "div[data-test-id='conversation']",
+                "chat_title": "div.conversation-title",
+                "chat_menu_button": "button[data-test-id='actions-menu-button']",
+                "chat_rename_input": "input[data-test-id='edit-title-input']",
+                "delete_confirm_button": "button[data-test-id='confirm-button']",
             },
             # Additional Gemini-specific settings
             "snippet_length": 280,

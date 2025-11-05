@@ -52,6 +52,13 @@ class ClaudeAI(BaseAI):
                 "new_chat_button": "button[aria-label*='New chat']",
                 "response_container": "div.font-claude-response",
                 "response_content": ".standard-markdown",
+                # Chat management selectors
+                "chat_sidebar": "ul",  # The <ul> containing chat list items
+                "chat_item": "a[href^='/chat/']",  # Links to chat pages
+                "chat_title": "span.truncate",  # Title text within chat item
+                "chat_menu_button": "button[aria-label^='More options']",  # Three-dot menu
+                "chat_rename_input": "input[data-testid='name-chat']",
+                "delete_confirm_button": "button[data-testid='delete-modal-confirm']",
             },
             # Additional Claude-specific settings
             "snippet_length": 280,
