@@ -31,6 +31,11 @@ class StatsDisplay(Gtk.Box):
         self._tokens_per_sec: float | None = None
         self._avg_tokens_per_sec: float | None = None
 
+        # Store context warning thresholds (updated from daemon config)
+        self._yellow_threshold: int = 70
+        self._orange_threshold: int = 85
+        self._red_threshold: int = 95
+
         # Add title
         title = Gtk.Label()
         title.set_markup("<b>Statistics</b>")
@@ -66,6 +71,7 @@ class StatsDisplay(Gtk.Box):
         # Context stats
         self.context_label = self._create_stat_label("Context: -", selectable=True)
         self.usage_label = self._create_stat_label("Usage: -", selectable=True)
+        self.usage_label.set_use_markup(True)  # Enable markup for color-coded warnings
 
         # Add separator for performance metrics
         separator2 = Gtk.Separator(orientation=Gtk.Orientation.HORIZONTAL)
@@ -175,7 +181,7 @@ class StatsDisplay(Gtk.Box):
         # Context usage percentage (optional, use helper)
         usage_pct = stats_helper.extract_context_usage_percent(metadata)
         if usage_pct is not None:
-            self.usage_label.set_text(f"Usage: {usage_pct:.1f}%")
+            self._update_usage_with_warning(usage_pct)
         else:
             self.usage_label.set_text("Usage: -")
 
@@ -267,6 +273,55 @@ class StatsDisplay(Gtk.Box):
             )
         else:
             self.avg_tokens_per_sec_label.set_text("Avg Tokens/sec: -")
+
+    def set_context_warning_thresholds(self, yellow: int = 70, orange: int = 85, red: int = 95):
+        """
+        Update context warning thresholds from daemon config.
+
+        Args:
+            yellow: Yellow warning threshold (default 70%)
+            orange: Orange warning threshold (default 85%)
+            red: Red warning threshold (default 95%)
+        """
+        self._yellow_threshold = yellow
+        self._orange_threshold = orange
+        self._red_threshold = red
+
+    def _update_usage_with_warning(self, usage_pct: float):
+        """
+        Update context usage label with color-coded warning.
+
+        Args:
+            usage_pct: Context usage percentage (0-100)
+        """
+        logger.debug(
+            f"Context usage: {usage_pct:.1f}% (thresholds: Y={self._yellow_threshold}, "
+            f"O={self._orange_threshold}, R={self._red_threshold})"
+        )
+
+        # Determine color and warning level based on stored thresholds
+        if usage_pct >= self._red_threshold:
+            color = "red"
+            icon = "⚠️"
+            severity = "CRITICAL"
+        elif usage_pct >= self._orange_threshold:
+            color = "orange"
+            icon = "⚠️"
+            severity = "HIGH"
+        elif usage_pct >= self._yellow_threshold:
+            color = "#FFA500"  # Orange color for yellow threshold
+            icon = "⚠️"
+            severity = "WARNING"
+        else:
+            # Below warning threshold - show green with checkmark
+            color = "green"
+            icon = "✓"
+            severity = "OK"
+
+        # Apply color markup
+        markup = f'<span foreground="{color}">{icon} Usage: {usage_pct:.1f}% ({severity})</span>'
+        logger.debug(f"Applying markup: {markup}")
+        self.usage_label.set_markup(markup)
 
     def clear(self):
         """Clear all stats to default values"""
