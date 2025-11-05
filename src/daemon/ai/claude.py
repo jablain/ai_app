@@ -28,12 +28,19 @@ class ClaudeAI(BaseAI):
             - max_context_tokens: Claude's context window size
             - base_url: Claude web interface URL
             - selectors: CSS selectors for Claude's UI elements
+            - context_warning: Warning thresholds for context usage
             - timing: Response timing configuration
         """
         return {
             "ai_target": "claude",
             "max_context_tokens": 200000,
             "base_url": "https://claude.ai",
+            # Context usage warning thresholds
+            "context_warning": {
+                "yellow_threshold": 70,  # Warning starts at 70%
+                "orange_threshold": 85,  # More urgent at 85%
+                "red_threshold": 95,  # Critical at 95%
+            },
             # Timing configuration
             "response_wait_s": 60.0,
             "completion_check_interval_s": 0.3,

@@ -316,6 +316,7 @@ async def send(request: SendRequest):
             metadata = {}
 
         metadata.setdefault("timeout_s", request.timeout_s)
+        metadata.setdefault("context_warning", ai.get_config()["context_warning"])
 
         return SendResponse(
             success=bool(success),

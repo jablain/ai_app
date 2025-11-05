@@ -94,17 +94,23 @@ def _print_human_status(full_status: dict[str, Any], ai_name: str | None) -> int
             ctw = v.get("ctaw_size")
             typer.echo(f"  Context Window:    {ctw:,} tokens")
 
-        # Context usage with color coding
+        # Context usage with color coding (using AI-specific thresholds)
         if "ctaw_usage_percent" in v:
             usage = v.get("ctaw_usage_percent", 0)
             usage_str = f"  Context Used:      {usage}%"
 
-            # Color code based on usage
-            if usage >= 95:
+            # Get AI-specific thresholds (with fallback to defaults)
+            warning_config = v.get("context_warning", {})
+            yellow = warning_config.get("yellow_threshold", 70)
+            orange = warning_config.get("orange_threshold", 85)
+            red = warning_config.get("red_threshold", 95)
+
+            # Color code based on AI-specific thresholds
+            if usage >= red:
                 typer.secho(usage_str, fg=typer.colors.RED)
-            elif usage >= 85:
+            elif usage >= orange:
                 typer.secho(usage_str, fg=typer.colors.YELLOW)
-            elif usage >= 70:
+            elif usage >= yellow:
                 typer.secho(usage_str, fg=typer.colors.YELLOW)
             else:
                 typer.echo(usage_str)

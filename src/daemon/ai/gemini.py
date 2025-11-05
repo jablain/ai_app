@@ -28,12 +28,19 @@ class GeminiAI(BaseAI):
             - max_context_tokens: Gemini's context window size
             - base_url: Gemini web interface URL
             - selectors: CSS selectors for Gemini's UI elements
+            - context_warning: Warning thresholds for context usage
             - timing: Response timing configuration
         """
         return {
             "ai_target": "gemini",
             "max_context_tokens": 2000000,  # Gemini 1.5 Pro context window
             "base_url": "https://gemini.google.com",
+            # Context usage warning thresholds (higher due to massive context)
+            "context_warning": {
+                "yellow_threshold": 80,  # Huge context - can go further before warning
+                "orange_threshold": 90,  # More urgent at 90%
+                "red_threshold": 95,  # Critical at 95%
+            },
             # Timing configuration
             "response_wait_s": 60.0,
             "completion_check_interval_s": 0.3,

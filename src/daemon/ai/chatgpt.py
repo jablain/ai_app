@@ -28,12 +28,19 @@ class ChatGPTAI(BaseAI):
             - max_context_tokens: ChatGPT's context window size
             - base_url: ChatGPT web interface URL
             - selectors: CSS selectors for ChatGPT's UI elements
+            - context_warning: Warning thresholds for context usage
             - timing: Response timing configuration
         """
         return {
             "ai_target": "chatgpt",
             "max_context_tokens": 128000,  # ChatGPT-4 context window
             "base_url": "https://chatgpt.com",
+            # Context usage warning thresholds (slightly more conservative)
+            "context_warning": {
+                "yellow_threshold": 65,  # Warning starts earlier due to smaller window
+                "orange_threshold": 80,  # More urgent at 80%
+                "red_threshold": 90,  # Critical at 90%
+            },
             # Timing configuration
             "response_wait_s": 60.0,
             "completion_check_interval_s": 0.3,

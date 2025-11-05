@@ -499,13 +499,24 @@ class BaseAI(ABC):
         """
         Get AI session status (implementation-agnostic).
 
-        Extends base session status with transport info.
+        Extends base session status with transport info and context warning thresholds.
         """
         base = {
             "ai_target": self.get_ai_target(),
             **self._session.to_dict(),
         }
         base["transport"] = self.get_transport_status()
+
+        # Include context warning thresholds from config
+        base["context_warning"] = self._config.get(
+            "context_warning",
+            {
+                "yellow_threshold": 70,
+                "orange_threshold": 85,
+                "red_threshold": 95,
+            },
+        )
+
         return base
 
     def get_ai_target(self) -> str:
