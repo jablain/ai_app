@@ -121,6 +121,41 @@ async def lifespan(app: FastAPI):
                 try:
                     ai_class = AIFactory.get_class(ai_name)
                     ai_config = ai_class.get_default_config()
+                    
+                    # Merge per-AI config overrides from daemon_config.toml
+                    # Check if there's a [ai.{name}] section in loaded config
+                    loaded_config_dict = config.__dict__ if hasattr(config, '__dict__') else {}
+                    
+                    # Try to get per-AI overrides from the raw loaded TOML
+                    # We need to re-load to access the [ai.{name}] sections since they're not
+                    # in the AppConfig dataclass structure
+                    from daemon.config import CONFIG_FILE
+                    import tomli
+                    from pathlib import Path
+                    
+                    config_file = Path(CONFIG_FILE)
+                    if config_file.exists():
+                        try:
+                            with open(config_file, "rb") as f:
+                                loaded_toml = tomli.load(f)
+                            
+                            # Check for per-AI context_warning overrides
+                            if "ai" in loaded_toml and ai_name in loaded_toml["ai"]:
+                                ai_section = loaded_toml["ai"][ai_name]
+                                if "context_warning" in ai_section:
+                                    # Merge overrides into ai_config
+                                    overrides = ai_section["context_warning"]
+                                    if "context_warning" not in ai_config:
+                                        ai_config["context_warning"] = {}
+                                    
+                                    for key in ["yellow_threshold", "orange_threshold", "red_threshold"]:
+                                        if key in overrides:
+                                            ai_config["context_warning"][key] = int(overrides[key])
+                                    
+                                    logger.info(f"Applied context_warning overrides for '{ai_name}': {overrides}")
+                        except Exception as e:
+                            logger.warning(f"Could not load per-AI config overrides: {e}")
+                    
                     instance = AIFactory.create(ai_name, ai_config)
 
                     if hasattr(instance, "set_browser_pool"):

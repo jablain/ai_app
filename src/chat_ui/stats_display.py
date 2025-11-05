@@ -152,6 +152,15 @@ class StatsDisplay(Gtk.Box):
         Args:
             metadata: Response metadata dictionary from daemon
         """
+        # Update context warning thresholds from AI-specific config (if present)
+        if "context_warning" in metadata:
+            warning_config = metadata["context_warning"]
+            yellow = warning_config.get("yellow_threshold", 70)
+            orange = warning_config.get("orange_threshold", 85)
+            red = warning_config.get("red_threshold", 95)
+            self.set_context_warning_thresholds(yellow, orange, red)
+            logger.debug(f"Updated context warning thresholds: Y={yellow}, O={orange}, R={red}")
+        
         # Turn count (use helper for tolerance)
         turn_count = stats_helper.extract_turn_count(metadata)
         self.turn_label.set_text(f"Turn: {turn_count}")

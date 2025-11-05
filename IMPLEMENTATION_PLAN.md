@@ -37,13 +37,14 @@ This document outlines the implementation plan for five major features being add
 
 ## Feature #1: Context Usage Warning
 
-### Status: 80% Complete ✅
+### Status: 70% Complete ⚠️ (needs per-AI refactoring)
 
 ### Requirements
-- **Thresholds:** 70% (yellow), 85% (orange), 95% (red) - configurable
+- **Thresholds:** 70% (yellow), 85% (orange), 95% (red) - configurable **per AI**
 - **UI Display:** Color + icon (⚠️) in stats sidebar usage label
 - **CLI Display:** Warning message in output (non-blocking)
-- **Config Location:** Daemon config file (daemon_config.toml)
+- **Config Location:** Per-AI profile in daemon config file (daemon_config.toml)
+- **Rationale:** Different AIs have different context window sizes (Claude: 200k, GPT-4: 8k-128k, Gemini: up to 1M+), so thresholds should be AI-specific
 
 ### What's Already Implemented
 
@@ -57,10 +58,10 @@ class ContextWarningConfig:
     red_threshold: int = 95
 ```
 
-✅ **Config Loading Logic** (`src/daemon/config.py:408-436`)
+⚠️ **Config Loading Logic** (`src/daemon/config.py:408-436`)
 - Parses `[features.context_warning]` section from TOML
 - Validates threshold values as positive integers
-- Applies to all AI instances
+- **NEEDS UPDATE:** Currently applies globally, should be per-AI profile instead
 
 ✅ **CLI Display** (`src/cli_bridge/commands/send_cmd.py:126-149`)
 ```python
@@ -78,33 +79,91 @@ else:
 
 ### Remaining Work
 
-❌ **1. Add Config to daemon_config.toml**
-```toml
-# File: runtime/daemon/config/daemon_config.toml
-# Add this section:
+❌ **1. Update Config System to Support Per-AI Thresholds**
 
-[features.context_warning]
+**File:** `src/daemon/config.py`
+
+**Changes Needed:**
+- Move `ContextWarningConfig` from global to per-AI profile
+- Update config loading to read thresholds from each AI profile section
+- Provide sensible defaults if thresholds not specified
+
+**File:** `runtime/daemon/config/daemon_config.toml`
+
+**Add per-AI threshold configuration:**
+```toml
+[ai_profiles.claude]
+name = "claude"
+# ... existing config ...
+
+[ai_profiles.claude.context_warning]
 yellow_threshold = 70
 orange_threshold = 85
 red_threshold = 95
+
+[ai_profiles.chatgpt]
+name = "chatgpt"
+# ... existing config ...
+
+[ai_profiles.chatgpt.context_warning]
+yellow_threshold = 60   # More conservative due to smaller context window
+orange_threshold = 75
+red_threshold = 90
+
+[ai_profiles.gemini]
+name = "gemini"
+# ... existing config ...
+
+[ai_profiles.gemini.context_warning]
+yellow_threshold = 80   # More relaxed due to larger context window
+orange_threshold = 90
+red_threshold = 95
 ```
 
-**Location:** Lines 24-26 (after existing `[features]` section)  
-**Effort:** 5 minutes  
-**Risk:** None
+**Effort:** 1-2 hours  
+**Risk:** Low (refactoring existing config structure)
 
 ---
 
-❌ **2. GTK4 UI Stats Sidebar Enhancement**
+❌ **2. Update CLI to Use Per-AI Thresholds**
+
+**File:** `src/cli_bridge/commands/send_cmd.py`
+
+**Changes Needed:**
+- Fetch thresholds from the AI's specific configuration (from status response)
+- Use AI-specific thresholds instead of hardcoded values
+
+**Implementation:**
+```python
+# Get AI-specific thresholds from status response
+thresholds = status_data.get('context_warning_thresholds', {
+    'yellow': 70,
+    'orange': 85,
+    'red': 95
+})
+
+yellow = thresholds.get('yellow', 70)
+orange = thresholds.get('orange', 85)
+red = thresholds.get('red', 95)
+
+# Rest of existing display logic...
+```
+
+**Effort:** 30 minutes  
+**Risk:** Low
+
+---
+
+❌ **3. GTK4 UI Stats Sidebar Enhancement**
 
 **File:** `src/chat_ui/stats_display.py` or `src/chat_ui/window.py`
 
 **Implementation:**
 ```python
 def update_context_display(self, usage_percent: float, thresholds: dict):
-    """Update context usage label with color coding."""
+    """Update context usage label with color coding using AI-specific thresholds."""
     
-    # Determine color based on thresholds
+    # Determine color based on AI-specific thresholds
     if usage_percent >= thresholds['red']:
         color = 'red'
         icon = '⚠️'
@@ -134,22 +193,26 @@ def update_context_display(self, usage_percent: float, thresholds: dict):
 
 ### Testing Checklist
 
-- [ ] Config loads correctly with custom thresholds
+- [ ] Config loads correctly with per-AI custom thresholds
 - [ ] Config validates (rejects negative values, invalid types)
-- [ ] CLI displays correct colors at each threshold
-- [ ] GTK4 UI updates in real-time
-- [ ] Default values work when config section missing
+- [ ] Different AIs can have different thresholds
+- [ ] CLI displays correct colors at each threshold for each AI
+- [ ] GTK4 UI updates in real-time with AI-specific thresholds
+- [ ] Default values work when AI profile lacks context_warning section
 - [ ] Warnings appear non-blocking (don't prevent send)
+- [ ] Switching between AIs applies correct thresholds
 
 ### Completion Criteria
 
-- ✅ Config infrastructure
-- ✅ CLI display
-- ❌ Config file populated
-- ❌ GTK4 UI implementation
+- ⚠️ Config infrastructure (exists but needs refactoring for per-AI support)
+- ⚠️ CLI display (exists but needs update to use AI-specific thresholds)
+- ❌ Config system refactored to per-AI
+- ❌ Config file populated with per-AI thresholds
+- ❌ CLI updated to fetch and use AI-specific thresholds
+- ❌ GTK4 UI implementation with AI-specific thresholds
 - ❌ Tests written
 
-**Estimated Time to Complete:** 2-3 hours
+**Estimated Time to Complete:** 3-5 hours (increased due to per-AI refactoring)
 
 ---
 
@@ -1754,12 +1817,12 @@ ai-cli-bridge send claude "Fix bug" \
 
 ### Recommended Order
 
-#### Phase 1: Complete Context Warning (High ROI, Low Effort)
-1. **Feature #1** - Add config to daemon_config.toml + GTK4 UI implementation
-   - **Time:** 2-3 hours
-   - **Value:** Complete an 80% done feature
+#### Phase 1: Complete Context Warning (High ROI, Medium Effort)
+1. **Feature #1** - Refactor config to per-AI, update daemon_config.toml + CLI + GTK4 UI
+   - **Time:** 3-5 hours
+   - **Value:** Complete an 80% done feature with proper per-AI support
    - **Dependencies:** None
-   - **Risk:** Low
+   - **Risk:** Low (refactoring existing infrastructure)
 
 #### Phase 2: Chat Management (High Value, Foundation Exists)
 2. **Feature #2** - CLI commands + Daemon endpoints
@@ -1790,9 +1853,9 @@ ai-cli-bridge send claude "Fix bug" \
    - **Risk:** Medium (per-AI selectors fragile)
 
 ### Total Estimated Time
-- **Minimum:** 28 hours
-- **Maximum:** 37 hours
-- **With testing/polish:** 40-50 hours
+- **Minimum:** 29 hours
+- **Maximum:** 39 hours
+- **With testing/polish:** 42-52 hours
 
 ---
 
@@ -1814,7 +1877,7 @@ ai-app/
 │   │
 │   ├── daemon/              # FastAPI service
 │   │   ├── main.py          # API endpoints
-│   │   ├── config.py        # ✅ Has ContextWarningConfig
+│   │   ├── config.py        # ⚠️ Has ContextWarningConfig (needs per-AI refactor)
 │   │   ├── health.py
 │   │   ├── ai/
 │   │   │   ├── base.py      # ✅ Has chat methods
@@ -1853,7 +1916,7 @@ ai-app/
 ├── runtime/
 │   └── daemon/
 │       └── config/
-│           └── daemon_config.toml  # ⚠️ NEEDS [features.context_warning]
+│           └── daemon_config.toml  # ⚠️ NEEDS per-AI [context_warning] sections
 │
 └── .ai-cli-bridge/          # ❌ TO CREATE (project-local configs)
     ├── context-presets.toml
@@ -1880,9 +1943,20 @@ POST /send                            # Send prompt (enhance with templates)
 
 #### Global Config: `runtime/daemon/config/daemon_config.toml`
 ```toml
-[features.context_warning]  # ❌ TO ADD
+# Per-AI context warning thresholds
+[ai_profiles.claude.context_warning]
 yellow_threshold = 70
 orange_threshold = 85
+red_threshold = 95
+
+[ai_profiles.chatgpt.context_warning]
+yellow_threshold = 60
+orange_threshold = 75
+red_threshold = 90
+
+[ai_profiles.gemini.context_warning]
+yellow_threshold = 80
+orange_threshold = 90
 red_threshold = 95
 ```
 
