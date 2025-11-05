@@ -16,7 +16,7 @@ from typing import Any, List, Optional
 
 @dataclass
 class ChatInfo:
-    """Information about a chat session."""
+    """Information about a chat."""
 
     chat_id: str
     title: str
@@ -192,16 +192,6 @@ class ITransport(ABC):
             - markdown: full response in markdown/plain text (or None)
             - metadata: JSON-safe dict (timings, ids, debug info)
                 - On error: metadata["error"] should be a TransportError.to_dict()
-        """
-        raise NotImplementedError
-
-    @abstractmethod
-    async def start_new_session(self) -> bool:
-        """
-        Start/ensure a fresh conversation session on the remote end.
-
-        Should clear provider-side context, reset tabs, or do whatever
-        is necessary to begin a clean chat.
         """
         raise NotImplementedError
 

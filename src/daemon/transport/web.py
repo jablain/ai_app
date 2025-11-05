@@ -148,8 +148,11 @@ class WebTransport(ITransport):
         self._cdp_url: str | None = None
         self._cdp_origin: str = "none"
 
-        # Last used page (not strictly required, but handy for start_new_session)
+        # Last used page (not strictly required, but handy for chat operations)
         self._page: Page | None = None
+
+        # Ready flag - set to True when page is loaded and input is visible
+        self._ready: bool = False  # ← ADD THIS
 
         # Store full config for reference
         self._config = config
@@ -404,19 +407,6 @@ class WebTransport(ITransport):
                     ),
                 ),
             )
-
-    async def start_new_session(self) -> bool:
-        """Click 'new chat' if present; otherwise no-op."""
-        try:
-            if not self._page:
-                return True
-            btn = self._page.locator(self.NEW_CHAT_BUTTON)
-            if await btn.count() > 0:
-                await btn.first.click()
-                await self._page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
-            return True
-        except Exception:
-            return False
 
     def get_status(self) -> dict[str, Any]:
         """Return current transport state for diagnostics."""
@@ -707,6 +697,7 @@ class WebTransport(ITransport):
     async def start_new_chat(self) -> ChatInfo | None:
         """
         Start a new chat by clicking new chat button.
+        This is the ONLY way to start fresh - there is no "reset" in web UIs.
 
         Returns:
             ChatInfo for new chat, or None if failed
@@ -718,12 +709,17 @@ class WebTransport(ITransport):
                 if not self._page:
                     return None
 
+            self._ready = False  # Navigating to new chat
+
             # Try to click new chat button
             new_chat_btn = self._page.locator(self.NEW_CHAT_BUTTON)
             if await new_chat_btn.count() > 0:
                 await new_chat_btn.first.click()
                 # Wait for navigation to complete
                 await self._page.wait_for_load_state("networkidle", timeout=10000)
+                # Wait for input to be ready
+                await self._page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
+                self._ready = True
 
                 # Get new chat info
                 return await self.get_current_chat()
@@ -732,11 +728,13 @@ class WebTransport(ITransport):
                 new_chat_url = f"{self.base_url}/new"
                 await self._page.goto(new_chat_url, wait_until="domcontentloaded", timeout=15000)
                 await self._page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
+                self._ready = True
                 return await self.get_current_chat()
 
         except Exception as e:
             if self._logger:
                 self._logger.error(f"Failed to start new chat: {e}")
+            self._ready = False
             return None
 
     def _extract_chat_id_from_url(self, url: str) -> str:

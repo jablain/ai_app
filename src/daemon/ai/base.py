@@ -367,26 +367,6 @@ class BaseAI(ABC):
             self._logger.debug(f"{self.__class__.__name__}.extract_message passthrough failed: {e}")
         return {"snippet": "", "markdown": ""}
 
-    async def start_new_session(self) -> bool:
-        """
-        Delegate to transport if supported.
-
-        This is now a concrete method in BaseAI - all subclasses use the same implementation.
-        """
-        try:
-            if self._transport and hasattr(self._transport, "start_new_session"):
-                success = await self._transport.start_new_session()  # type: ignore[attr-defined]
-                if success:
-                    # Reset session state when starting new session
-                    self._reset_session_state()
-                return success
-        except Exception as e:
-            self._logger.debug(
-                f"{self.__class__.__name__}.start_new_session passthrough failed: {e}"
-            )
-        # Not fatal if transport doesn't support it
-        return True
-
     # =========================
     # Chat Management (CONCRETE DELEGATION - NEW)
     # =========================
@@ -444,9 +424,11 @@ class BaseAI(ABC):
             self._logger.debug(f"{self.__class__.__name__}.switch_chat failed: {e}")
         return False
 
+    # The start_new_chat method stays (it's already correct, just ensure it resets state)
     async def start_new_chat(self) -> dict[str, Any] | None:
         """
         Start new chat (delegate to transport).
+        This creates a brand new chat and resets session state.
 
         Returns:
             Dictionary with new chat info, or None if failed
@@ -496,7 +478,7 @@ class BaseAI(ABC):
 
                 # Add connected flag based on transport status
                 # For WebTransport, check if we have a page
-                if hasattr(t, "_page") and t._page is not None:
+                if hasattr(t, "_cdp_url") and t._cdp_url is not None:
                     status["connected"] = True
                 else:
                     status["connected"] = False
@@ -614,7 +596,7 @@ class BaseAI(ABC):
         """
         Reset all session state (private - called by start_new_session).
 
-        This clears turn counter, token counts, and message history.
+        Called when switching chats or starting new chats to reset analytics tracking.
         Should only be called from start_new_session() implementation.
         """
         self._logger.info("Resetting session state")
