@@ -19,6 +19,7 @@ from . import __version__
 
 # Import command modules
 from .commands import daemon_cmd
+from .commands import chats_cmd  # type: ignore
 from .commands.send_cmd import run as send_run
 from .commands.status_cmd import run as status_run
 from .errors import InvalidConfiguration
@@ -32,12 +33,16 @@ app = typer.Typer(
         "  aicli-bridge daemon start\n"
         "  aicli-bridge send claude 'hello'\n"
         "  aicli-bridge status --json\n"
+        "  aicli-bridge chats list claude\n"
     ),
     no_args_is_help=True,
 )
 
 # Wire in daemon command group (start, stop, status)
 app.add_typer(daemon_cmd.app, name="daemon")
+
+# Wire in chats command group (list, switch, new)
+app.add_typer(chats_cmd.app, name="chats")
 
 
 # ---------------------------------------------------------------------------

@@ -39,6 +39,9 @@ class ChatWindow(Gtk.ApplicationWindow):
         # Initial stats refresh (in background)
         threading.Thread(target=self._refresh_status_thread, daemon=True).start()
 
+        # Initial chat list load (in background)
+        threading.Thread(target=self._load_chats_thread, daemon=True).start()
+
         # Start periodic refresh (every 3 seconds)
         self._start_periodic_refresh()
 
@@ -58,12 +61,50 @@ class ChatWindow(Gtk.ApplicationWindow):
 
         self.set_titlebar(header)
 
-        # Content area (response + stats)
+        # Content area (chat list + response + stats)
         content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         content_box.set_margin_top(12)
         content_box.set_margin_bottom(12)
         content_box.set_margin_start(12)
         content_box.set_margin_end(12)
+
+        # Chat list sidebar
+        chat_sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        chat_sidebar.set_size_request(200, -1)
+
+        # Chat list header with buttons
+        chat_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        chat_label = Gtk.Label(label="Chats")
+        chat_label.set_hexpand(True)
+        chat_label.set_halign(Gtk.Align.START)
+        chat_header.append(chat_label)
+
+        # New chat button
+        new_chat_btn = Gtk.Button(label="+")
+        new_chat_btn.connect("clicked", self._on_new_chat_clicked)
+        new_chat_btn.set_tooltip_text("New Chat")
+        chat_header.append(new_chat_btn)
+
+        # Refresh button
+        refresh_btn = Gtk.Button(label="⟳")
+        refresh_btn.connect("clicked", self._on_refresh_chats_clicked)
+        refresh_btn.set_tooltip_text("Refresh Chat List")
+        chat_header.append(refresh_btn)
+
+        chat_sidebar.append(chat_header)
+
+        # Chat list in scrolled window
+        chat_scroll = Gtk.ScrolledWindow()
+        chat_scroll.set_vexpand(True)
+        chat_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+
+        self.chat_listbox = Gtk.ListBox()
+        self.chat_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.chat_listbox.connect("row-activated", self._on_chat_selected)
+        chat_scroll.set_child(self.chat_listbox)
+
+        chat_sidebar.append(chat_scroll)
+        content_box.append(chat_sidebar)
 
         # Response display
         self.response_display = ResponseDisplay()
@@ -166,6 +207,8 @@ class ChatWindow(Gtk.ApplicationWindow):
             logger.info(f"Switched to AI: {self.current_ai}")
             # Refresh stats for new AI (in background)
             threading.Thread(target=self._refresh_status_thread, daemon=True).start()
+            # Refresh chat list for new AI
+            threading.Thread(target=self._load_chats_thread, daemon=True).start()
 
     def _extract_ai_fields(self, ai_json: dict) -> dict:
         """
@@ -410,8 +453,146 @@ class ChatWindow(Gtk.ApplicationWindow):
             # Show error
             error_msg = response.error or "Unknown error"
             self.status_label.set_text(f"✗ {error_msg}")
-            self.response_display.set_text(f"Error: {error_msg}")
-            logger.error(f"Response error: {error_msg}")
+
+    def _load_chats(self):
+        """Load chat list for current AI"""
+        try:
+            chats = self.daemon_client.list_chats(self.current_ai)
+            
+            # Clear current list
+            while True:
+                row = self.chat_listbox.get_row_at_index(0)
+                if row is None:
+                    break
+                self.chat_listbox.remove(row)
+            
+            # Add chats to list and track current chat row
+            current_row = None
+            for chat in chats:
+                row = Gtk.ListBoxRow()
+                box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+                box.set_margin_start(6)
+                box.set_margin_end(6)
+                box.set_margin_top(4)
+                box.set_margin_bottom(4)
+                
+                # Title label
+                title = chat.get("title", "Untitled")
+                if chat.get("is_current"):
+                    title = "→ " + title
+                    current_row = row  # Track the current chat row
+                
+                label = Gtk.Label(label=title)
+                label.set_hexpand(True)
+                label.set_halign(Gtk.Align.START)
+                label.set_ellipsize(3)  # PANGO_ELLIPSIZE_END
+                box.append(label)
+                
+                row.set_child(box)
+                row.chat_data = chat  # Store chat data on row
+                self.chat_listbox.append(row)
+            
+            # Select the current chat row to highlight it
+            if current_row:
+                self.chat_listbox.select_row(current_row)
+            else:
+                # If no current chat, unselect all
+                self.chat_listbox.unselect_all()
+                
+            logger.debug(f"Loaded {len(chats)} chats for {self.current_ai}")
+        except Exception as e:
+            logger.error(f"Failed to load chats: {e}")
+
+    def _on_chat_selected(self, listbox, row):
+        """Handle chat selection"""
+        if not row or not hasattr(row, "chat_data"):
+            return
+        
+        chat = row.chat_data
+        chat_id = chat.get("chat_id")
+        
+        if chat_id:
+            logger.info(f"Switching to chat: {chat_id}")
+            success = self.daemon_client.switch_chat(self.current_ai, chat_id)
+            if success:
+                self.status_label.set_text(f"✓ Switched to: {chat.get('title', 'chat')}")
+                # Reload chat list to update current indicator
+                threading.Thread(target=self._load_chats_thread, daemon=True).start()
+            else:
+                self.status_label.set_text("✗ Failed to switch chat")
+
+    def _on_new_chat_clicked(self, button):
+        """Handle new chat button click"""
+        logger.info("Creating new chat")
+        success = self.daemon_client.new_chat(self.current_ai)
+        if success:
+            self.status_label.set_text("✓ New chat created")
+            # Reload chat list
+            threading.Thread(target=self._load_chats_thread, daemon=True).start()
+        else:
+            self.status_label.set_text("✗ Failed to create new chat")
+
+    def _on_refresh_chats_clicked(self, button):
+        """Handle refresh chats button click"""
+        logger.info("Refreshing chat list")
+        threading.Thread(target=self._load_chats_thread, daemon=True).start()
+
+
+
+    def _load_chats_thread(self):
+        """Load chats in background thread and update UI"""
+        try:
+            chats = self.daemon_client.list_chats(self.current_ai)
+            GLib.idle_add(self._update_chat_list, chats)
+        except Exception as e:
+            logger.error(f"Failed to load chats in thread: {e}")
+
+    def _update_chat_list(self, chats):
+        """Update chat list in UI (must be called from main thread)"""
+        try:
+            # Clear current list
+            while True:
+                row = self.chat_listbox.get_row_at_index(0)
+                if row is None:
+                    break
+                self.chat_listbox.remove(row)
+            
+            # Add chats to list and track current chat row
+            current_row = None
+            for chat in chats:
+                row = Gtk.ListBoxRow()
+                box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+                box.set_margin_start(6)
+                box.set_margin_end(6)
+                box.set_margin_top(4)
+                box.set_margin_bottom(4)
+                
+                # Title label
+                title = chat.get("title", "Untitled")
+                if chat.get("is_current"):
+                    title = "→ " + title
+                    current_row = row  # Track the current chat row
+                
+                label = Gtk.Label(label=title)
+                label.set_hexpand(True)
+                label.set_halign(Gtk.Align.START)
+                label.set_ellipsize(3)  # PANGO_ELLIPSIZE_END
+                box.append(label)
+                
+                row.set_child(box)
+                row.chat_data = chat  # Store chat data on row
+                self.chat_listbox.append(row)
+            
+            # Select the current chat row to highlight it
+            if current_row:
+                self.chat_listbox.select_row(current_row)
+            else:
+                # If no current chat, unselect all
+                self.chat_listbox.unselect_all()
+                
+            logger.debug(f"Updated UI with {len(chats)} chats")
+        except Exception as e:
+            logger.error(f"Failed to update chat list: {e}")
 
         return False  # Don't repeat this idle callback
 

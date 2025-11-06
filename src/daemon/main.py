@@ -72,6 +72,60 @@ class HealthResponse(BaseModel):
     uptime_s: float
 
 
+class ChatInfoModel(BaseModel):
+    """Model for chat information."""
+
+    chat_id: str
+    title: str
+    url: str
+    is_current: bool
+
+
+class ListChatsRequest(BaseModel):
+    """Request model for /chats/list endpoint."""
+
+    target: str = Field(..., description="AI target (claude, chatgpt, gemini)")
+
+
+class ListChatsResponse(BaseModel):
+    """Response model for /chats/list endpoint."""
+
+    success: bool
+    chats: list[ChatInfoModel] = Field(default_factory=list)
+    error: dict[str, Any] | None = None
+
+
+class SwitchChatRequest(BaseModel):
+    """Request model for /chats/switch endpoint."""
+
+    target: str = Field(..., description="AI target (claude, chatgpt, gemini)")
+    chat_id: str = Field(..., description="Chat ID or URL to switch to")
+
+
+class SwitchChatResponse(BaseModel):
+    """Response model for /chats/switch endpoint."""
+
+    success: bool
+    error: dict[str, Any] | None = None
+
+
+class NewChatRequest(BaseModel):
+    """Request model for /chats/new endpoint."""
+
+    target: str = Field(..., description="AI target (claude, chatgpt, gemini)")
+
+
+class NewChatResponse(BaseModel):
+    """Response model for /chats/new endpoint."""
+
+    success: bool
+    chat: ChatInfoModel | None = None
+    error: dict[str, Any] | None = None
+
+
+
+
+
 # --- Lifecycle Management ---
 
 
@@ -389,6 +443,126 @@ async def send(request: SendRequest):
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
             },
         )
+
+
+# --- Chat Management Endpoints ---
+
+
+@app.post("/chats/list", response_model=ListChatsResponse)
+async def list_chats_endpoint(request: ListChatsRequest):
+    """List all chats for a specific AI target."""
+    ai_instances = daemon_state["ai_instances"]
+
+    if request.target not in ai_instances:
+        return ListChatsResponse(
+            success=False,
+            chats=[],
+            error={
+                "code": "INVALID_TARGET",
+                "message": f"Unknown AI target: {request.target}",
+            },
+        )
+
+    ai = ai_instances[request.target]
+
+    try:
+        chat_dicts = await ai.list_chats()
+        return ListChatsResponse(
+            success=True,
+            chats=[
+                ChatInfoModel(
+                    chat_id=chat["chat_id"],
+                    title=chat["title"],
+                    url=chat["url"],
+                    is_current=chat["is_current"],
+                )
+                for chat in chat_dicts
+            ],
+        )
+    except Exception as e:
+        logger.error(f"Error listing chats for {request.target}: {e}", exc_info=True)
+        return ListChatsResponse(
+            success=False,
+            chats=[],
+            error={"code": "INTERNAL_ERROR", "message": str(e)},
+        )
+
+
+@app.post("/chats/switch", response_model=SwitchChatResponse)
+async def switch_chat_endpoint(request: SwitchChatRequest):
+    """Switch to a specific chat."""
+    ai_instances = daemon_state["ai_instances"]
+
+    if request.target not in ai_instances:
+        return SwitchChatResponse(
+            success=False,
+            error={
+                "code": "INVALID_TARGET",
+                "message": f"Unknown AI target: {request.target}",
+            },
+        )
+
+    ai = ai_instances[request.target]
+
+    try:
+        success = await ai.switch_chat(request.chat_id)
+        return SwitchChatResponse(success=success)
+    except Exception as e:
+        logger.error(f"Error switching chat for {request.target}: {e}", exc_info=True)
+        return SwitchChatResponse(
+            success=False,
+            error={"code": "INTERNAL_ERROR", "message": str(e)},
+        )
+
+
+@app.post("/chats/new", response_model=NewChatResponse)
+async def new_chat_endpoint(request: NewChatRequest):
+    """Start a new chat."""
+    ai_instances = daemon_state["ai_instances"]
+
+    if request.target not in ai_instances:
+        return NewChatResponse(
+            success=False,
+            chat=None,
+            error={
+                "code": "INVALID_TARGET",
+                "message": f"Unknown AI target: {request.target}",
+            },
+        )
+
+    ai = ai_instances[request.target]
+
+    try:
+        chat_dict = await ai.start_new_chat()
+        if chat_dict:
+            return NewChatResponse(
+                success=True,
+                chat=ChatInfoModel(
+                    chat_id=chat_dict["chat_id"],
+                    title=chat_dict["title"],
+                    url=chat_dict["url"],
+                    is_current=chat_dict["is_current"],
+                ),
+            )
+        else:
+            return NewChatResponse(
+                success=False,
+                chat=None,
+                error={"code": "OPERATION_FAILED", "message": "Failed to create new chat"},
+            )
+    except Exception as e:
+        logger.error(f"Error creating new chat for {request.target}: {e}", exc_info=True)
+        return NewChatResponse(
+            success=False,
+            chat=None,
+            error={"code": "INTERNAL_ERROR", "message": str(e)},
+        )
+
+
+
+
+
+
 
 
 # --- Main Entry Point ---

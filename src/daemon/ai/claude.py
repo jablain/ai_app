@@ -56,13 +56,10 @@ class ClaudeAI(BaseAI):
                 "chat_sidebar": "ul",  # The <ul> containing chat list items
                 "chat_item": "a[href^='/chat/']",  # Links to chat pages
                 "chat_title": "span.truncate",  # Title text within chat item
-                "chat_menu_button": "button[aria-label^='More options']",  # Three-dot menu
-                "chat_rename_input": "input[data-testid='name-chat']",
-                "delete_confirm_button": "button[data-testid='delete-modal-confirm']",
-            },
-            # Additional Claude-specific settings
-            "snippet_length": 280,
-        }
+             },
+             # Additional Claude-specific settings
+             "snippet_length": 280,
+         }
 
 
 # Register this adapter with the factory under the key 'claude'

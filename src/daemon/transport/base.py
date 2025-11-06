@@ -269,3 +269,5 @@ class ITransport(ABC):
             ChatInfo for new chat, or None if failed
         """
         raise NotImplementedError
+
+

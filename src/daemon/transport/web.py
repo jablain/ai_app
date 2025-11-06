@@ -138,6 +138,12 @@ class WebTransport(ITransport):
             "response_container", "div[data-message-author-role='assistant']"
         )
         self.RESPONSE_CONTENT = selectors.get("response_content", ".standard-markdown")
+        
+        # Chat management selectors
+        self.CHAT_SIDEBAR = selectors.get("chat_sidebar", "nav")
+        self.CHAT_ITEM = selectors.get("chat_item", "a[href*='/chat/']")
+        self.CHAT_TITLE = selectors.get("chat_title", "span")
+        self.ACTIVE_CHAT = selectors.get("active_chat", "a[aria-current='page']")
 
         # Read timing configuration from config (with defaults)
         self.RESPONSE_WAIT_S = config.get("response_wait_s", 60.0)
@@ -606,37 +612,187 @@ class WebTransport(ITransport):
 
     async def list_chats(self) -> List[ChatInfo]:
         """
-        List all available chats from browser tabs.
+        List all available chats from the sidebar.
 
         Returns:
-            List of ChatInfo objects for matching tabs
+            List of ChatInfo objects from the chat sidebar
         """
         try:
-            # Ensure we have connection
-            await self._get_cdp_url()
-            pages_info = await self.browser_pool.list_pages()
+            if self._logger:
+                self._logger.info(f"list_chats called for {self.name}")
+                
+            if not self._page:
+                if self._logger:
+                    self._logger.debug("No page available, acquiring...")
+                ws_url, _ = await self._get_cdp_url()
+                if not ws_url:
+                    if self._logger:
+                        self._logger.error("No CDP URL available")
+                    return []
+                self._page = await self._pick_page(ws_url)
+                if not self._page:
+                    if self._logger:
+                        self._logger.error("Failed to get page")
+                    return []
+
+            if self._logger:
+                self._logger.debug(f"Using page: {self._page.url}")
+                self._logger.debug(f"Chat sidebar selector: {self.CHAT_SIDEBAR}")
+                self._logger.debug(f"Chat item selector: {self.CHAT_ITEM}")
+
+            # Wait for sidebar to be visible
+            try:
+                await self._page.locator(self.CHAT_SIDEBAR).first.wait_for(
+                    state="visible", timeout=5000
+                )
+                if self._logger:
+                    self._logger.debug("Sidebar is visible")
+                    # DEBUG: Log sidebar HTML
+                    sidebar_html = await self._page.locator(self.CHAT_SIDEBAR).first.inner_html()
+                    self._logger.debug(f"Sidebar HTML (first 500 chars): {sidebar_html[:500]}")
+            except Exception as e:
+                if self._logger:
+                    self._logger.error(f"Sidebar not visible: {e}")
+                return []
+
+            # Get all chat items from sidebar
+            chat_items = self._page.locator(self.CHAT_ITEM)
+            count = await chat_items.count()
+            
+            if self._logger:
+                self._logger.info(f"Found {count} chat items in sidebar using selector: {self.CHAT_ITEM}")
+                if count == 0:
+                    # DEBUG: Try alternative selectors
+                    all_divs = await self._page.locator(self.CHAT_SIDEBAR).locator("div").count()
+                    self._logger.debug(f"Sidebar contains {all_divs} div elements")
+                    # Log some sample elements
+                    for i in range(min(5, all_divs)):
+                        div_html = await self._page.locator(self.CHAT_SIDEBAR).locator("div").nth(i).inner_html()
+                        self._logger.debug(f"Div {i} HTML: {div_html[:200]}...")
 
             chats = []
-            for page_info in pages_info:
-                url = page_info.get("url", "")
-                title = page_info.get("title", "") or "Untitled"
+            for i in range(count):
+                item = chat_items.nth(i)
+                
 
-                # Check if this page matches our base URL
-                if self.base_url in url:
-                    chat_id = self._extract_chat_id_from_url(url)
-                    is_current = False  # We don't track current page in base implementation
 
-                    chats.append(
-                        ChatInfo(
-                            chat_id=chat_id or url, title=title, url=url, is_current=is_current
-                        )
+                # Extract URL - different approaches for different AI providers
+                # Method 1: Try href attribute (works for <a> tags - Claude, ChatGPT)
+                href = await item.get_attribute("href")
+                
+                # Method 2: Look for <a> tag child (works for Gemini div containers)
+                if not href:
+                    link = item.locator("a").first
+                    if await link.count() > 0:
+                        href = await link.get_attribute("href")
+                        if self._logger and href:
+                            self._logger.info(f"Chat item {i}: Found href from <a> child: {href}")
+                
+                # Method 3: Try data-url or similar attributes
+                if not href:
+                    href = await item.get_attribute("data-url") or \
+                           await item.get_attribute("data-href")
+                
+                # Method 4: Gemini-specific - try multiple approaches
+                if not href and "gemini" in self.name:
+                    # 4a: Try to find any <a> tag with href (not just first)
+                    all_links = item.locator("a")
+                    link_count = await all_links.count()
+                    if self._logger:
+                        self._logger.debug(f"Gemini chat item {i}: found {link_count} <a> tags")
+                    
+                    for link_idx in range(link_count):
+                        link_href = await all_links.nth(link_idx).get_attribute("href")
+                        if link_href:
+                            href = link_href
+                            if self._logger:
+                                self._logger.debug(f"Gemini: Using href from link {link_idx}: {href}")
+                            break
+                    
+                    # 4b: Extract from jslog attribute as fallback
+                    if not href:
+                        jslog = await item.get_attribute("jslog")
+                        if jslog and "BardVeMetadataKey" in jslog:
+                            try:
+                                # Parse the BardVeMetadataKey array
+                                start = jslog.find("BardVeMetadataKey:[")
+                                if start != -1:
+                                    # Find the end of the array (before ;mutable)
+                                    mutable_pos = jslog.find(";mutable", start)
+                                    if mutable_pos != -1:
+                                        import json
+                                        array_str = jslog[start+18:mutable_pos]
+                                        data = json.loads(array_str)
+                                        if len(data) >= 8 and data[7] and isinstance(data[7], list) and len(data[7]) > 0:
+                                            chat_id = data[7][0]
+                                            pattern = self._config.get("chat_url_pattern", "/{chat_id}")
+                                            href = f"{self.base_url}{pattern.format(chat_id=chat_id)}"
+                                            if self._logger:
+                                                self._logger.debug(f"Gemini: Extracted from jslog: {href}")
+                            except Exception as e:
+                                if self._logger:
+                                    self._logger.debug(f"Failed to parse Gemini jslog: {e}")
+
+                # Skip if we still can't find a URL
+                if not href:
+                    if self._logger:
+                        self._logger.warning(f"Chat item {i} has no URL, skipping")
+                    continue
+                    
+                # Make absolute URL if needed
+                if href.startswith("/"):
+                    url = f"{self.base_url}{href}"
+                else:
+                    url = href
+                
+                # Extract chat ID (strips c_ prefix for Gemini)
+                chat_id = self._extract_chat_id_from_url(url)
+                
+                # Reconstruct clean URL for Gemini (without c_ prefix)
+                if "gemini" in self.name and "/app/c_" in url:
+                    # Rebuild URL with cleaned chat_id
+                    url = f"{self.base_url}/app/{chat_id}"
+                
+                if self._logger:
+                    self._logger.debug(f"Chat {i}: url={url}, chat_id={chat_id}")
+                
+                # Extract title
+                title_elem = item.locator(self.CHAT_TITLE).first
+                title = "Untitled"
+                if await title_elem.count() > 0:
+                    title = (await title_elem.inner_text()).strip() or "Untitled"
+                
+                # Check if this is the active chat
+                # Method 1: Check if chat URL matches current page URL
+                current_url = self._page.url
+                is_current = (url == current_url or chat_id in current_url)
+                
+                # Method 2: Fallback to attribute-based detection if URL doesn't match
+                if not is_current and self.ACTIVE_CHAT:
+                    data_active = await item.get_attribute("data-active")
+                    aria_current = await item.get_attribute("aria-current")
+                    is_current = (data_active == "true") or (aria_current == "page")
+                
+                # Method 3: Gemini-specific - check if item has selected/active class or attribute
+                if not is_current and "gemini" in self.name:
+                    # Check for common active indicators
+                    class_attr = await item.get_attribute("class") or ""
+                    is_current = ("selected" in class_attr or "active" in class_attr)
+                
+                chats.append(
+                    ChatInfo(
+                        chat_id=chat_id or url,
+                        title=title,
+                        url=url,
+                        is_current=is_current
                     )
+                )
 
             return chats
 
         except Exception as e:
             if self._logger:
-                self._logger.error(f"Failed to list chats: {e}")
+                self._logger.error(f"Failed to list chats from sidebar: {e}")
             return []
 
     async def get_current_chat(self) -> ChatInfo | None:
@@ -660,38 +816,198 @@ class WebTransport(ITransport):
                 self._logger.error(f"Failed to get current chat: {e}")
             return None
 
-    async def switch_chat(self, chat_id: str) -> bool:
+    async def _get_gemini_chat_elements(self) -> list[tuple[ChatInfo, Any]]:
         """
-        Switch to a specific chat by ID or URL.
+        Get Gemini chat list with actual DOM elements for clicking.
+        
+        Returns:
+            List of tuples (ChatInfo, element) for each chat
+        """
+        result = []
+        try:
+            if not self._page:
+                return result
+            
+            chat_items = self._page.locator(self.CHAT_ITEM)
+            count = await chat_items.count()
+            
+            for i in range(count):
+                item = chat_items.nth(i)
+                
+                # Extract title
+                title_elem = item.locator(self.CHAT_TITLE).first
+                title = "Untitled"
+                if await title_elem.count() > 0:
+                    title = (await title_elem.inner_text()).strip() or "Untitled"
+                
+                # Try to get URL - check for <a> tag first
+                url = None
+                link = item.locator("a").first
+                if await link.count() > 0:
+                    href = await link.get_attribute("href")
+                    if href:
+                        if href.startswith("/"):
+                            url = f"{self.base_url}{href}"
+                        else:
+                            url = href
+                
+                # If no URL found, construct from current page URL pattern
+                if not url:
+                    # Use a placeholder - we'll match by title or index instead
+                    url = f"{self.base_url}/app/chat_{i}"
+                
+                # Extract chat ID (strips c_ prefix for Gemini)
+                chat_id = self._extract_chat_id_from_url(url)
+                
+                # Reconstruct clean URL (without c_ prefix for Gemini)
+                if url and "/app/c_" in url:
+                    url = f"{self.base_url}/app/{chat_id}"
+                
+                chat_info = ChatInfo(
+                    chat_id=chat_id or f"chat_{i}",
+                    title=title,
+                    url=url,
+                    is_current=False  # We don't need this for clicking
+                )
+                
+                result.append((chat_info, item))
+                
+        except Exception as e:
+            if self._logger:
+                self._logger.error(f"Failed to get Gemini chat elements: {e}")
+        
+        return result
+
+    async def switch_chat(self, identifier: str) -> bool:
+        """
+        Switch to a specific chat by ID, title, index, or URL.
 
         Args:
-            chat_id: Chat ID, URL, or identifier
+            identifier: Chat ID, title, index, or URL
 
         Returns:
             True if successful, False otherwise
         """
         try:
-            # If it looks like a URL, navigate directly
-            if chat_id.startswith(("http://", "https://")):
-                target_url = chat_id
-            else:
-                # Assume it's a chat ID - construct URL
-                target_url = f"{self.base_url}/chat/{chat_id}"
-
+            # Ensure we have a page
             if not self._page:
-                # Get a new page for this URL
-                ws_url, _ = await self._get_cdp_url()
-                self._page = await self._pick_page(ws_url)
-                if not self._page:
-                    return False
+                if self._logger:
+                    self._logger.error("No page available for chat switching")
+                return False
+            
+            if self._logger:
+                self._logger.info(f"switch_chat called with identifier: {identifier}")
+            
+            # If it looks like a URL, navigate directly
+            if identifier.startswith(("http://", "https://")):
+                target_url = identifier
+                if self._logger:
+                    self._logger.debug(f"Identifier is already a URL: {target_url}")
+            else:
+                # Try to resolve identifier to URL
+                chats = await self.list_chats()
+                if self._logger:
+                    self._logger.debug(f"Found {len(chats)} chats to search through")
+                    for idx, chat in enumerate(chats):
+                        self._logger.debug(f"  Chat {idx}: id={chat.chat_id}, url={chat.url}, title={chat.title}")
+                
+                target_chat = None
 
-            await self._page.goto(target_url, wait_until="domcontentloaded", timeout=15000)
-            await self._page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
+                # Check if it's a numeric index
+                if identifier.isdigit():
+                    index = int(identifier)
+                    if 0 <= index < len(chats):
+                        target_chat = chats[index]
+                        if self._logger:
+                            self._logger.debug(f"Found chat by index {index}: {target_chat.url}")
+                else:
+                    # Find by chat_id
+                    target_chat = next((c for c in chats if c.chat_id == identifier), None)
+                    if target_chat and self._logger:
+                        self._logger.debug(f"Found chat by chat_id: {target_chat.url}")
+                    
+                    if not target_chat:
+                        # Find by title substring
+                        target_chat = next((c for c in chats if identifier.lower() in c.title.lower()), None)
+                        if target_chat and self._logger:
+                            self._logger.debug(f"Found chat by title substring: {target_chat.url}")
+
+                if target_chat:
+                    target_url = target_chat.url
+                else:
+                    # Fallback to constructing URL directly (for backward compatibility)
+                    if "gemini" in self.base_url.lower():
+                        target_url = f"{self.base_url}/app/{identifier}"
+                    else:
+                        target_url = f"{self.base_url}/chat/{identifier}"
+                    if self._logger:
+                        self._logger.warning(f"Could not find chat, using fallback URL: {target_url}")
+
+            # For Gemini, use click-based switching since it's a SPA
+            if "gemini" in self.base_url.lower():
+                if self._logger:
+                    self._logger.info(f"Using click-based switching for Gemini to: {target_url}")
+                
+                # Get list of chats with their elements to find the right one to click
+                chats_with_elements = await self._get_gemini_chat_elements()
+                clicked = False
+                
+                for chat_info, element in chats_with_elements:
+                    # Match by URL or chat_id (with flexible matching for Gemini's c_ prefix)
+                    url_match = (chat_info.url == target_url)
+                    id_match = (chat_info.chat_id == identifier)
+                    # Also try matching with c_ prefix removed/added for Gemini
+                    id_match_alt = (chat_info.chat_id.lstrip('c_') == identifier.lstrip('c_'))
+                    
+                    if url_match or id_match or id_match_alt:
+                        if self._logger:
+                            self._logger.info(f"Found matching chat, clicking it: {chat_info.title} (url={chat_info.url}, chat_id={chat_info.chat_id}, identifier={identifier})")
+                        try:
+                            # Click the div itself (Gemini's divs are clickable)
+                            await element.click()
+                            clicked = True
+                            # Wait for SPA transition
+                            await self._page.wait_for_timeout(1500)
+                            break
+                        except Exception as e:
+                            if self._logger:
+                                self._logger.warning(f"Failed to click chat item: {e}")
+                
+                if not clicked:
+                    if self._logger:
+                        self._logger.warning(f"Could not find/click chat item, falling back to navigation")
+                    await self._page.goto(target_url, wait_until="domcontentloaded", timeout=15000)
+                else:
+                    # Additional wait for content to load
+                    await self._page.wait_for_timeout(500)
+            else:
+                # For Claude/ChatGPT, use traditional URL navigation
+                if self._logger:
+                    self._logger.info(f"Navigating to: {target_url}")
+                
+                await self._page.goto(target_url, wait_until="domcontentloaded", timeout=15000)
+                
+                if self._logger:
+                    self._logger.debug(f"Navigation completed, current URL: {self._page.url}")
+            
+            # Wait for input box with more lenient handling
+            try:
+                await self._page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=8000)
+                if self._logger:
+                    self._logger.debug("Input box is visible")
+            except Exception as e:
+                if self._logger:
+                    self._logger.warning(f"Input box not immediately visible after switch, but navigation succeeded: {e}")
+                # Give it a bit more time for Gemini's slower UI
+                await self._page.wait_for_timeout(1000)
+            
+            if self._logger:
+                self._logger.info(f"Successfully switched to chat: {identifier}")
             return True
 
         except Exception as e:
             if self._logger:
-                self._logger.error(f"Failed to switch chat: {e}")
+                self._logger.error(f"Failed to switch to chat {identifier}: {e}")
             return False
 
     async def start_new_chat(self) -> ChatInfo | None:
@@ -711,23 +1027,89 @@ class WebTransport(ITransport):
 
             self._ready = False  # Navigating to new chat
 
+            if self._logger:
+                self._logger.info(f"Starting new chat, selector: {self.NEW_CHAT_BUTTON}")
+
             # Try to click new chat button
             new_chat_btn = self._page.locator(self.NEW_CHAT_BUTTON)
-            if await new_chat_btn.count() > 0:
-                await new_chat_btn.first.click()
-                # Wait for navigation to complete
-                await self._page.wait_for_load_state("networkidle", timeout=10000)
-                # Wait for input to be ready
-                await self._page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
-                self._ready = True
-
-                # Get new chat info
-                return await self.get_current_chat()
+            btn_count = await new_chat_btn.count()
+            
+            if self._logger:
+                self._logger.debug(f"Found {btn_count} elements matching new chat button selector")
+            
+            if btn_count > 0:
+                if self._logger:
+                    self._logger.info(f"Clicking new chat button (found {btn_count} matches)")
+                
+                try:
+                    # Store current URL to detect navigation
+                    current_url = self._page.url
+                    if self._logger:
+                        self._logger.debug(f"Current URL before click: {current_url}")
+                    
+                    # Click the button
+                    await new_chat_btn.first.click()
+                    
+                    if self._logger:
+                        self._logger.info("New chat button clicked")
+                    
+                    # For Gemini, wait for URL to change to /app
+                    if "gemini" in self.base_url.lower():
+                        # Wait for URL to change
+                        try:
+                            await self._page.wait_for_url(f"{self.base_url}/app", timeout=5000)
+                            if self._logger:
+                                self._logger.info(f"URL changed to: {self._page.url}")
+                        except Exception as e:
+                            if self._logger:
+                                self._logger.warning(f"URL did not change to /app, current URL: {self._page.url}")
+                        
+                        # Additional wait for SPA content to load
+                        await self._page.wait_for_timeout(2000)
+                    else:
+                        # Wait for navigation to complete
+                        await self._page.wait_for_load_state("networkidle", timeout=10000)
+                    
+                    # Wait for input to be ready
+                    try:
+                        await self._page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=8000)
+                        if self._logger:
+                            self._logger.debug("Input box is visible after new chat")
+                    except Exception as e:
+                        if self._logger:
+                            self._logger.warning(f"Input box not visible after new chat click: {e}")
+                    
+                    self._ready = True
+                    
+                    # Get new chat info
+                    chat_info = await self.get_current_chat()
+                    if self._logger:
+                        self._logger.info(f"New chat created: {chat_info.url if chat_info else 'None'}")
+                    return chat_info
+                    
+                except Exception as e:
+                    if self._logger:
+                        self._logger.error(f"Error during new chat button click: {e}")
+                    # Continue to fallback
             else:
-                # Fallback: navigate to new chat URL
-                new_chat_url = f"{self.base_url}/new"
+                # Fallback: navigate to new chat URL (Gemini-aware)
+                if self._logger:
+                    self._logger.warning("New chat button not found, using fallback URL navigation")
+                
+                if "gemini" in self.base_url.lower():
+                    new_chat_url = f"{self.base_url}/app"
+                else:
+                    new_chat_url = f"{self.base_url}/new"
+                
+                if self._logger:
+                    self._logger.info(f"Navigating to new chat URL: {new_chat_url}")
+                
                 await self._page.goto(new_chat_url, wait_until="domcontentloaded", timeout=15000)
-                await self._page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=5000)
+                try:
+                    await self._page.wait_for_selector(self.INPUT_BOX, state="visible", timeout=8000)
+                except Exception as e:
+                    if self._logger:
+                        self._logger.warning(f"Input box not visible after navigation, continuing anyway: {e}")
                 self._ready = True
                 return await self.get_current_chat()
 
@@ -736,6 +1118,8 @@ class WebTransport(ITransport):
                 self._logger.error(f"Failed to start new chat: {e}")
             self._ready = False
             return None
+
+
 
     def _extract_chat_id_from_url(self, url: str) -> str:
         """
@@ -751,12 +1135,17 @@ class WebTransport(ITransport):
         patterns = [
             r"/chat/([a-f0-9-]+)",  # Claude pattern
             r"/c/([a-zA-Z0-9-]+)",  # ChatGPT pattern
+            r"/app/([a-zA-Z0-9_-]+)",  # Gemini pattern (may have c_ prefix)
             r"/([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})",  # UUID pattern
         ]
 
         for pattern in patterns:
             match = re.search(pattern, url)
             if match:
-                return match.group(1)
+                chat_id = match.group(1)
+                # Strip Gemini's c_ prefix if present (Gemini uses /app/c_XXX in hrefs but /app/XXX in actual URLs)
+                if "/app/" in url and chat_id.startswith("c_"):
+                    chat_id = chat_id[2:]  # Remove "c_" prefix
+                return chat_id
 
         return ""

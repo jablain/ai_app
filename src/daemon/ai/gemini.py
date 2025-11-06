@@ -44,22 +44,22 @@ class GeminiAI(BaseAI):
             # Timing configuration
             "response_wait_s": 60.0,
             "completion_check_interval_s": 0.3,
-            # CSS Selectors for Gemini's UI
-            "selectors": {
-                "input_box": "div.ql-editor[contenteditable='true'][aria-label*='prompt']",
-                "stop_button": "mat-icon[fonticon='stop']",
-                "send_button": "button[aria-label='Send message']",
-                "new_chat_button": "button:has-text('New chat'), a:has-text('New chat')",
-                "response_container": "message-content",
-                "response_content": "div.markdown.markdown-main-panel",
-                # Chat management selectors
-                "chat_sidebar": "conversations-list[data-test-id='all-conversations']",
-                "chat_item": "div[data-test-id='conversation']",
-                "chat_title": "div.conversation-title",
-                "chat_menu_button": "button[data-test-id='actions-menu-button']",
-                "chat_rename_input": "input[data-test-id='edit-title-input']",
-                "delete_confirm_button": "button[data-test-id='confirm-button']",
-            },
+             # CSS Selectors for Gemini's UI
+             "selectors": {
+                 "input_box": "div.ql-editor[contenteditable='true'][aria-label*='prompt']",
+                 "stop_button": "mat-icon[fonticon='stop']",
+                 "send_button": "button[aria-label='Send message']",
+                 "new_chat_button": "button[data-test-id='expanded-button'][aria-label='New chat']",
+                 "response_container": "message-content",
+                 "response_content": "div.markdown.markdown-main-panel",
+                 # Chat management selectors
+                 "chat_sidebar": "conversations-list[data-test-id='all-conversations']",
+                 "chat_item": "div[data-test-id='conversation']",
+                 "chat_title": "div.conversation-title",
+                 "active_chat": "div[data-test-id='conversation'][data-active='true']",
+             },
+             # Chat URL pattern for switching
+             "chat_url_pattern": "/app/{chat_id}",
             # Additional Gemini-specific settings
             "snippet_length": 280,
         }

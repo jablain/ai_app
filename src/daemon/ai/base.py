@@ -445,6 +445,8 @@ class BaseAI(ABC):
             self._logger.debug(f"{self.__class__.__name__}.start_new_chat failed: {e}")
         return None
 
+
+
     # =========================
     # Transport Status (CONCRETE - formerly in subclasses)
     # =========================

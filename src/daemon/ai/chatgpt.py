@@ -56,14 +56,11 @@ class ChatGPTAI(BaseAI):
                 "chat_sidebar": "div#history",
                 "chat_item": "#history a[href^='/c/']",
                 "chat_title": "span[dir='auto']",
-                "chat_menu_button": "button[aria-label='Open conversation options']",
                 "active_chat": "a[data-active]",
-                "delete_confirm_button": "button[data-testid='delete-conversation-confirm-button']",
-                # Note: rename selector skipped due to technical issues
-            },
-            # Additional ChatGPT-specific settings
-            "snippet_length": 280,
-        }
+             },
+             # Additional ChatGPT-specific settings
+             "snippet_length": 280,
+         }
 
 
 # Register this adapter with the factory under the key 'chatgpt'

@@ -185,6 +185,79 @@ class CLIWrapper:
             logger.exception(error_msg)
             return SendResponse(success=False, error=error_msg)
 
+    def list_chats(self, ai: str) -> list[dict[str, Any]]:
+        """List all chats for an AI"""
+        try:
+            logger.debug(f"Listing chats for AI: {ai}")
+            result = subprocess.run(
+                ["ai-cli-bridge", "chats", "list", ai.strip(), "--json"],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+
+            if result.returncode != 0:
+                logger.error(f"List chats command failed (exit {result.returncode})")
+                logger.error(f"stderr: {result.stderr}")
+                logger.error(f"stdout: {result.stdout}")
+                return []
+
+            logger.debug(f"List chats stdout: {result.stdout[:200]}...")
+            
+            try:
+                response = json.loads(result.stdout)
+                logger.debug(f"Parsed response: {response}")
+                
+                if response.get("success"):
+                    chats = response.get("chats", [])
+                    logger.info(f"Retrieved {len(chats)} chats for {ai}")
+                    return chats
+                else:
+                    error = response.get("error", {})
+                    logger.error(f"List chats failed: {error}")
+                    return []
+            except json.JSONDecodeError as e:
+                logger.error(f"Invalid JSON response: {e}")
+                logger.error(f"Raw output: {result.stdout}")
+                return []
+
+        except subprocess.TimeoutExpired:
+            logger.error("List chats command timed out")
+            return []
+        except Exception as e:
+            logger.error(f"Failed to list chats: {e}", exc_info=True)
+            return []
+
+    def switch_chat(self, ai: str, chat_id: str) -> bool:
+        """Switch to a specific chat"""
+        try:
+            result = subprocess.run(
+                ["ai-cli-bridge", "chats", "switch", ai.strip(), chat_id],
+                capture_output=True,
+                text=True,
+                timeout=10,
+            )
+            return result.returncode == 0
+        except Exception as e:
+            logger.error(f"Failed to switch chat: {e}")
+            return False
+
+    def new_chat(self, ai: str) -> bool:
+        """Create a new chat"""
+        try:
+            result = subprocess.run(
+                ["ai-cli-bridge", "chats", "new", ai.strip()],
+                capture_output=True,
+                text=True,
+                timeout=20,  # Increased for Gemini's slower SPA transitions
+            )
+            return result.returncode == 0
+        except Exception as e:
+            logger.error(f"Failed to create new chat: {e}")
+            return False
+
+
+
     def close(self):
         """Close the wrapper (no-op for CLI)"""
         logger.debug("CLIWrapper closed (no-op)")
