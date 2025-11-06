@@ -6,6 +6,8 @@ and displaying the response. It acts as a lightweight client, packaging the
 user's request and sending it over HTTP.
 """
 
+from __future__ import annotations
+
 import json
 
 import requests

@@ -11,15 +11,13 @@ from __future__ import annotations
 
 import typer
 
-# Import config and errors for dependency injection
 from daemon.config import load_config
 
-# Import version
 from . import __version__
-
-# Import command modules
-from .commands import daemon_cmd
-from .commands import chats_cmd  # type: ignore
+from .commands import (
+    chats_cmd,  # type: ignore
+    daemon_cmd,
+)
 from .commands.send_cmd import run as send_run
 from .commands.status_cmd import run as status_run
 from .errors import InvalidConfiguration

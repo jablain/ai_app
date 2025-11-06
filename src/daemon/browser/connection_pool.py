@@ -174,12 +174,10 @@ class BrowserConnectionPool:
             return
 
         try:
-            logger.info("Terminating launched browser process and children...")
             import os
-            import shlex
             import signal
-            import subprocess
 
+            logger.info("Terminating launched browser process and children...")
             pgid = os.getpgid(self._browser_process.pid)
             app_id = None
 

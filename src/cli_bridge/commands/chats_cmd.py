@@ -7,6 +7,8 @@ This module provides CLI commands for managing chat history:
 - new: Create a new chat
 """
 
+from __future__ import annotations
+
 import json
 
 import requests

@@ -26,6 +26,73 @@ logger = logging.getLogger(__name__)
 # Version
 VERSION = "2.1.0"
 
+
+def _apply_ai_config_overrides(ai_config: dict, ai_name: str, config: Any, logger_obj) -> dict:
+    """
+    Apply per-AI configuration overrides from daemon_config.toml.
+
+    Args:
+        ai_config: Base AI configuration from get_default_config()
+        ai_name: Name of the AI (e.g., 'claude', 'gemini')
+        config: Loaded AppConfig object
+        logger_obj: Logger for diagnostics
+
+    Returns:
+        Updated ai_config with overrides applied
+    """
+    from pathlib import Path
+
+    import tomli
+
+    from daemon.config import CONFIG_FILE
+
+    config_file = Path(CONFIG_FILE)
+    if not config_file.exists():
+        return ai_config
+
+    try:
+        with open(config_file, "rb") as f:
+            loaded_toml = tomli.load(f)
+
+        # Check for per-AI context_warning overrides
+        if "ai" in loaded_toml and ai_name in loaded_toml["ai"]:
+            ai_section = loaded_toml["ai"][ai_name]
+            if "context_warning" in ai_section:
+                # Merge overrides into ai_config
+                overrides = ai_section["context_warning"]
+                if "context_warning" not in ai_config:
+                    ai_config["context_warning"] = {}
+
+                for key in ["yellow_threshold", "orange_threshold", "red_threshold"]:
+                    if key in overrides:
+                        ai_config["context_warning"][key] = int(overrides[key])
+
+                logger_obj.info(f"Applied context_warning overrides for '{ai_name}': {overrides}")
+    except Exception as e:
+        logger_obj.warning(f"Could not load per-AI config overrides: {e}")
+
+    return ai_config
+
+
+def _create_error_response(code: str, message: str, **extra) -> dict:
+    """
+    Create standardized error response for API endpoints.
+
+    Args:
+        code: Error code (e.g., 'INVALID_TARGET')
+        message: User-friendly error message
+        **extra: Additional fields to include in error dict
+
+    Returns:
+        Error dict with standardized structure
+    """
+    return {
+        "code": code,
+        "message": message,
+        **extra,
+    }
+
+
 # Global state
 daemon_state: dict[str, Any] = {
     "browser_pool": None,
@@ -123,9 +190,6 @@ class NewChatResponse(BaseModel):
     error: dict[str, Any] | None = None
 
 
-
-
-
 # --- Lifecycle Management ---
 
 
@@ -175,41 +239,10 @@ async def lifespan(app: FastAPI):
                 try:
                     ai_class = AIFactory.get_class(ai_name)
                     ai_config = ai_class.get_default_config()
-                    
-                    # Merge per-AI config overrides from daemon_config.toml
-                    # Check if there's a [ai.{name}] section in loaded config
-                    loaded_config_dict = config.__dict__ if hasattr(config, '__dict__') else {}
-                    
-                    # Try to get per-AI overrides from the raw loaded TOML
-                    # We need to re-load to access the [ai.{name}] sections since they're not
-                    # in the AppConfig dataclass structure
-                    from daemon.config import CONFIG_FILE
-                    import tomli
-                    from pathlib import Path
-                    
-                    config_file = Path(CONFIG_FILE)
-                    if config_file.exists():
-                        try:
-                            with open(config_file, "rb") as f:
-                                loaded_toml = tomli.load(f)
-                            
-                            # Check for per-AI context_warning overrides
-                            if "ai" in loaded_toml and ai_name in loaded_toml["ai"]:
-                                ai_section = loaded_toml["ai"][ai_name]
-                                if "context_warning" in ai_section:
-                                    # Merge overrides into ai_config
-                                    overrides = ai_section["context_warning"]
-                                    if "context_warning" not in ai_config:
-                                        ai_config["context_warning"] = {}
-                                    
-                                    for key in ["yellow_threshold", "orange_threshold", "red_threshold"]:
-                                        if key in overrides:
-                                            ai_config["context_warning"][key] = int(overrides[key])
-                                    
-                                    logger.info(f"Applied context_warning overrides for '{ai_name}': {overrides}")
-                        except Exception as e:
-                            logger.warning(f"Could not load per-AI config overrides: {e}")
-                    
+
+                    # Apply per-AI config overrides from daemon_config.toml
+                    ai_config = _apply_ai_config_overrides(ai_config, ai_name, config, logger)
+
                     instance = AIFactory.create(ai_name, ai_config)
 
                     if hasattr(instance, "set_browser_pool"):
@@ -383,16 +416,16 @@ async def send(request: SendRequest):
             snippet=None,
             markdown=None,
             metadata={
-                "error": {
-                    "code": "INVALID_TARGET",
-                    "message": f"Unknown AI target: {request.target}",
-                    "severity": "error",
-                    "suggested_action": f"Use one of: {', '.join(ai_instances.keys())}",
-                    "evidence": {
+                "error": _create_error_response(
+                    code="INVALID_TARGET",
+                    message=f"Unknown AI target: {request.target}",
+                    severity="error",
+                    suggested_action=f"Use one of: {', '.join(ai_instances.keys())}",
+                    evidence={
                         "requested": request.target,
                         "available": list(ai_instances.keys()),
                     },
-                },
+                ),
                 "warnings": [],
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
                 "timeout_s": request.timeout_s,
@@ -428,16 +461,16 @@ async def send(request: SendRequest):
             snippet=None,
             markdown=None,
             metadata={
-                "error": {
-                    "code": "INTERNAL_ERROR",
-                    "message": f"Internal error: {str(e)}",
-                    "severity": "error",
-                    "suggested_action": "Check daemon logs and retry.",
-                    "evidence": {
+                "error": _create_error_response(
+                    code="INTERNAL_ERROR",
+                    message=f"Internal error: {str(e)}",
+                    severity="error",
+                    suggested_action="Check daemon logs and retry.",
+                    evidence={
                         "exception": str(e),
                         "exception_type": type(e).__name__,
                     },
-                },
+                ),
                 "warnings": [],
                 "timeout_s": request.timeout_s,
                 "timestamp": time.strftime("%Y-%m-%dT%H:%M:%S.000Z", time.gmtime()),
@@ -457,10 +490,10 @@ async def list_chats_endpoint(request: ListChatsRequest):
         return ListChatsResponse(
             success=False,
             chats=[],
-            error={
-                "code": "INVALID_TARGET",
-                "message": f"Unknown AI target: {request.target}",
-            },
+            error=_create_error_response(
+                code="INVALID_TARGET",
+                message=f"Unknown AI target: {request.target}",
+            ),
         )
 
     ai = ai_instances[request.target]
@@ -557,12 +590,6 @@ async def new_chat_endpoint(request: NewChatRequest):
             chat=None,
             error={"code": "INTERNAL_ERROR", "message": str(e)},
         )
-
-
-
-
-
-
 
 
 # --- Main Entry Point ---
