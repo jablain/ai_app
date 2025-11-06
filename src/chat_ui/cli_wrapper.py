@@ -1,5 +1,7 @@
 """CLI wrapper for ai-cli-bridge - replaces direct HTTP daemon client"""
 
+from __future__ import annotations
+
 import json
 import logging
 import subprocess
@@ -8,10 +10,13 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# Timeout constants
+# Timeout constants (seconds)
 HEALTH_TIMEOUT_S = 2
 STATUS_TIMEOUT_S = 10
 SEND_TIMEOUT_S = 120
+LIST_CHATS_TIMEOUT_S = 10
+SWITCH_CHAT_TIMEOUT_S = 10
+NEW_CHAT_TIMEOUT_S = 20  # Increased for Gemini's slower SPA transitions
 
 
 @dataclass
@@ -28,7 +33,7 @@ class SendResponse:
 class CLIWrapper:
     """Wrapper for ai-cli-bridge CLI commands"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize CLI wrapper"""
         logger.debug("CLIWrapper initialized")
 
@@ -68,9 +73,8 @@ class CLIWrapper:
                 # CLI returns {"ok": true, "data": {...}}
                 if response.get("ok") and "data" in response:
                     return response["data"]
-                else:
-                    logger.error("Unexpected status response format")
-                    return None
+                logger.error("Unexpected status response format")
+                return None
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid JSON in status response: {e}")
                 return None
@@ -116,10 +120,22 @@ class CLIWrapper:
         ai: str,
         prompt: str,
         wait_for_response: bool = True,
-        timeout_s: int = 120,
+        timeout_s: int = SEND_TIMEOUT_S,
         debug: bool = False,
     ) -> SendResponse:
-        """Send a prompt via CLI"""
+        """
+        Send a prompt via CLI
+
+        Args:
+            ai: Target AI provider name
+            prompt: User prompt text
+            wait_for_response: Whether to wait for response
+            timeout_s: Timeout in seconds
+            debug: Enable debug logging
+
+        Returns:
+            SendResponse with result
+        """
         if not ai or not ai.strip():
             return SendResponse(success=False, error="Missing AI target")
         if not prompt or not prompt.strip():
@@ -133,7 +149,7 @@ class CLIWrapper:
 
             if not wait_for_response:
                 cmd.append("--no-wait")
-            if timeout_s != 120:
+            if timeout_s != SEND_TIMEOUT_S:
                 cmd.extend(["--timeout", str(timeout_s)])
             if debug:
                 cmd.append("--debug")
@@ -186,14 +202,22 @@ class CLIWrapper:
             return SendResponse(success=False, error=error_msg)
 
     def list_chats(self, ai: str) -> list[dict[str, Any]]:
-        """List all chats for an AI"""
+        """
+        List all chats for an AI
+
+        Args:
+            ai: AI provider name
+
+        Returns:
+            List of chat dictionaries
+        """
         try:
             logger.debug(f"Listing chats for AI: {ai}")
             result = subprocess.run(
                 ["ai-cli-bridge", "chats", "list", ai.strip(), "--json"],
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=LIST_CHATS_TIMEOUT_S,
             )
 
             if result.returncode != 0:
@@ -203,19 +227,18 @@ class CLIWrapper:
                 return []
 
             logger.debug(f"List chats stdout: {result.stdout[:200]}...")
-            
+
             try:
                 response = json.loads(result.stdout)
                 logger.debug(f"Parsed response: {response}")
-                
+
                 if response.get("success"):
                     chats = response.get("chats", [])
                     logger.info(f"Retrieved {len(chats)} chats for {ai}")
                     return chats
-                else:
-                    error = response.get("error", {})
-                    logger.error(f"List chats failed: {error}")
-                    return []
+                error = response.get("error", {})
+                logger.error(f"List chats failed: {error}")
+                return []
             except json.JSONDecodeError as e:
                 logger.error(f"Invalid JSON response: {e}")
                 logger.error(f"Raw output: {result.stdout}")
@@ -229,13 +252,22 @@ class CLIWrapper:
             return []
 
     def switch_chat(self, ai: str, chat_id: str) -> bool:
-        """Switch to a specific chat"""
+        """
+        Switch to a specific chat
+
+        Args:
+            ai: AI provider name
+            chat_id: Chat ID to switch to
+
+        Returns:
+            True if successful
+        """
         try:
             result = subprocess.run(
                 ["ai-cli-bridge", "chats", "switch", ai.strip(), chat_id],
                 capture_output=True,
                 text=True,
-                timeout=10,
+                timeout=SWITCH_CHAT_TIMEOUT_S,
             )
             return result.returncode == 0
         except Exception as e:
@@ -243,25 +275,31 @@ class CLIWrapper:
             return False
 
     def new_chat(self, ai: str) -> bool:
-        """Create a new chat"""
+        """
+        Create a new chat
+
+        Args:
+            ai: AI provider name
+
+        Returns:
+            True if successful
+        """
         try:
             result = subprocess.run(
                 ["ai-cli-bridge", "chats", "new", ai.strip()],
                 capture_output=True,
                 text=True,
-                timeout=20,  # Increased for Gemini's slower SPA transitions
+                timeout=NEW_CHAT_TIMEOUT_S,
             )
             return result.returncode == 0
         except Exception as e:
             logger.error(f"Failed to create new chat: {e}")
             return False
 
-
-
-    def close(self):
+    def close(self) -> None:
         """Close the wrapper (no-op for CLI)"""
         logger.debug("CLIWrapper closed (no-op)")
 
-    def __del__(self):
+    def __del__(self) -> None:
         """Cleanup on deletion (no-op for CLI)"""
         pass

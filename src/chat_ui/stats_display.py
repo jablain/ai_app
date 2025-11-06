@@ -1,24 +1,35 @@
 # ruff: noqa: E402
 """Stats display widget for showing AI and token information"""
 
+from __future__ import annotations
+
 import logging
+from typing import Any
 
 import gi
 
 gi.require_version("Gtk", "4.0")
-from typing import Any
-
 from gi.repository import Gtk
 
 from chat_ui import stats_helper
 
 logger = logging.getLogger(__name__)
 
+# Context Warning Thresholds (percent)
+DEFAULT_YELLOW_THRESHOLD = 70
+DEFAULT_ORANGE_THRESHOLD = 85
+DEFAULT_RED_THRESHOLD = 95
+
+# Time thresholds for formatting
+SECONDS_PER_HOUR = 3600
+SECONDS_PER_MINUTE = 60
+MILLISECONDS_PER_SECOND = 1000
+
 
 class StatsDisplay(Gtk.Box):
     """Widget to display AI statistics and token usage"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=12)
         self.set_margin_top(6)
         self.set_margin_bottom(6)
@@ -32,9 +43,9 @@ class StatsDisplay(Gtk.Box):
         self._avg_tokens_per_sec: float | None = None
 
         # Store context warning thresholds (updated from daemon config)
-        self._yellow_threshold: int = 70
-        self._orange_threshold: int = 85
-        self._red_threshold: int = 95
+        self._yellow_threshold: int = DEFAULT_YELLOW_THRESHOLD
+        self._orange_threshold: int = DEFAULT_ORANGE_THRESHOLD
+        self._red_threshold: int = DEFAULT_RED_THRESHOLD
 
         # Add title
         title = Gtk.Label()
@@ -52,7 +63,7 @@ class StatsDisplay(Gtk.Box):
         # Initialize with empty values
         self.clear()
 
-    def _create_labels(self):
+    def _create_labels(self) -> None:
         """Create all stat labels"""
         # AI info
         self.ai_label = self._create_stat_label("AI: -", selectable=True)
@@ -106,6 +117,9 @@ class StatsDisplay(Gtk.Box):
             text: Initial label text
             selectable: Whether text can be selected/copied
             monospace: Whether to use monospace font
+
+        Returns:
+            Configured label widget
         """
         label = Gtk.Label(label=text)
         label.set_halign(Gtk.Align.START)
@@ -120,7 +134,7 @@ class StatsDisplay(Gtk.Box):
         self.append(label)
         return label
 
-    def update_ai_info(self, ai_name: str, model: str | None = None):
+    def update_ai_info(self, ai_name: str, model: str | None = None) -> None:
         """
         Update AI and model display
 
@@ -142,7 +156,7 @@ class StatsDisplay(Gtk.Box):
             fallback = model_map.get(ai_name.lower(), "Unknown")
             self.model_label.set_text(f"Model: {fallback}")
 
-    def update_from_metadata(self, metadata: dict[str, Any]):
+    def update_from_metadata(self, metadata: dict[str, Any]) -> None:
         """
         Update stats from response metadata (tolerant parsing)
 
@@ -155,12 +169,12 @@ class StatsDisplay(Gtk.Box):
         # Update context warning thresholds from AI-specific config (if present)
         if "context_warning" in metadata:
             warning_config = metadata["context_warning"]
-            yellow = warning_config.get("yellow_threshold", 70)
-            orange = warning_config.get("orange_threshold", 85)
-            red = warning_config.get("red_threshold", 95)
+            yellow = warning_config.get("yellow_threshold", DEFAULT_YELLOW_THRESHOLD)
+            orange = warning_config.get("orange_threshold", DEFAULT_ORANGE_THRESHOLD)
+            red = warning_config.get("red_threshold", DEFAULT_RED_THRESHOLD)
             self.set_context_warning_thresholds(yellow, orange, red)
             logger.debug(f"Updated context warning thresholds: Y={yellow}, O={orange}, R={red}")
-        
+
         # Turn count (use helper for tolerance)
         turn_count = stats_helper.extract_turn_count(metadata)
         self.turn_label.set_text(f"Turn: {turn_count}")
@@ -197,16 +211,8 @@ class StatsDisplay(Gtk.Box):
         # Session duration (always update if present)
         session_duration_s = stats_helper.extract_session_duration_s(metadata)
         if session_duration_s is not None:
-            if session_duration_s >= 3600:
-                hours = int(session_duration_s // 3600)
-                minutes = int((session_duration_s % 3600) // 60)
-                self.session_duration_label.set_text(f"Session: {hours}h {minutes}m")
-            elif session_duration_s >= 60:
-                minutes = int(session_duration_s // 60)
-                seconds = int(session_duration_s % 60)
-                self.session_duration_label.set_text(f"Session: {minutes}m {seconds}s")
-            else:
-                self.session_duration_label.set_text(f"Session: {session_duration_s:.0f}s")
+            formatted_duration = self._format_duration(session_duration_s)
+            self.session_duration_label.set_text(f"Session: {formatted_duration}")
         else:
             self.session_duration_label.set_text("Session: -")
 
@@ -214,7 +220,27 @@ class StatsDisplay(Gtk.Box):
         # This allows status refreshes to update session stats without clearing performance
         self._update_performance_if_present(metadata)
 
-    def _update_performance_if_present(self, metadata: dict[str, Any]):
+    def _format_duration(self, seconds: float) -> str:
+        """
+        Format duration in seconds to human-readable string
+
+        Args:
+            seconds: Duration in seconds
+
+        Returns:
+            Formatted duration string
+        """
+        if seconds >= SECONDS_PER_HOUR:
+            hours = int(seconds // SECONDS_PER_HOUR)
+            minutes = int((seconds % SECONDS_PER_HOUR) // SECONDS_PER_MINUTE)
+            return f"{hours}h {minutes}m"
+        if seconds >= SECONDS_PER_MINUTE:
+            minutes = int(seconds // SECONDS_PER_MINUTE)
+            secs = int(seconds % SECONDS_PER_MINUTE)
+            return f"{minutes}m {secs}s"
+        return f"{seconds:.0f}s"
+
+    def _update_performance_if_present(self, metadata: dict[str, Any]) -> None:
         """
         Update performance metrics only if they're present in metadata.
         This makes them "sticky" - they persist across status refreshes.
@@ -245,27 +271,19 @@ class StatsDisplay(Gtk.Box):
         # Update labels with stored values
         self._render_performance_metrics()
 
-    def _render_performance_metrics(self):
-        """Render performance metrics from stored values."""
+    def _render_performance_metrics(self) -> None:
+        """Render performance metrics from stored values"""
         # Last response time
         if self._last_response_ms is not None:
-            if self._last_response_ms >= 1000:
-                self.last_response_label.set_text(
-                    f"Last Response: {self._last_response_ms / 1000:.1f}s"
-                )
-            else:
-                self.last_response_label.set_text(f"Last Response: {self._last_response_ms}ms")
+            formatted_time = self._format_response_time(self._last_response_ms)
+            self.last_response_label.set_text(f"Last Response: {formatted_time}")
         else:
             self.last_response_label.set_text("Last Response: -")
 
         # Average response time
         if self._avg_response_ms is not None:
-            if self._avg_response_ms >= 1000:
-                self.avg_response_label.set_text(
-                    f"Avg Response: {self._avg_response_ms / 1000:.1f}s"
-                )
-            else:
-                self.avg_response_label.set_text(f"Avg Response: {self._avg_response_ms:.0f}ms")
+            formatted_time = self._format_response_time(self._avg_response_ms)
+            self.avg_response_label.set_text(f"Avg Response: {formatted_time}")
         else:
             self.avg_response_label.set_text("Avg Response: -")
 
@@ -283,9 +301,28 @@ class StatsDisplay(Gtk.Box):
         else:
             self.avg_tokens_per_sec_label.set_text("Avg Tokens/sec: -")
 
-    def set_context_warning_thresholds(self, yellow: int = 70, orange: int = 85, red: int = 95):
+    def _format_response_time(self, ms: float) -> str:
         """
-        Update context warning thresholds from daemon config.
+        Format response time in milliseconds
+
+        Args:
+            ms: Time in milliseconds
+
+        Returns:
+            Formatted time string
+        """
+        if ms >= MILLISECONDS_PER_SECOND:
+            return f"{ms / MILLISECONDS_PER_SECOND:.1f}s"
+        return f"{ms:.0f}ms"
+
+    def set_context_warning_thresholds(
+        self,
+        yellow: int = DEFAULT_YELLOW_THRESHOLD,
+        orange: int = DEFAULT_ORANGE_THRESHOLD,
+        red: int = DEFAULT_RED_THRESHOLD,
+    ) -> None:
+        """
+        Update context warning thresholds from daemon config
 
         Args:
             yellow: Yellow warning threshold (default 70%)
@@ -296,9 +333,9 @@ class StatsDisplay(Gtk.Box):
         self._orange_threshold = orange
         self._red_threshold = red
 
-    def _update_usage_with_warning(self, usage_pct: float):
+    def _update_usage_with_warning(self, usage_pct: float) -> None:
         """
-        Update context usage label with color-coded warning.
+        Update context usage label with color-coded warning
 
         Args:
             usage_pct: Context usage percentage (0-100)
@@ -332,7 +369,7 @@ class StatsDisplay(Gtk.Box):
         logger.debug(f"Applying markup: {markup}")
         self.usage_label.set_markup(markup)
 
-    def clear(self):
+    def clear(self) -> None:
         """Clear all stats to default values"""
         self.ai_label.set_text("AI: -")
         self.model_label.set_text("Model: -")

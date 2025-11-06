@@ -3,17 +3,30 @@ Simple markdown parser that applies GTK TextTags
 Supports: bold, italic, code, headers, code blocks, lists
 """
 
+from __future__ import annotations
+
 import re
 
 
 class MarkdownParser:
     """Parse markdown and apply formatting to TextBuffer"""
 
-    def __init__(self, text_buffer):
+    def __init__(self, text_buffer: object) -> None:
+        """
+        Initialize markdown parser
+
+        Args:
+            text_buffer: GTK TextBuffer to render into
+        """
         self.buffer = text_buffer
 
-    def parse_and_format(self, text):
-        """Parse markdown text and apply formatting"""
+    def parse_and_format(self, text: str) -> None:
+        """
+        Parse markdown text and apply formatting
+
+        Args:
+            text: Markdown text to parse
+        """
         lines = text.split("\n")
 
         i = 0
@@ -41,8 +54,17 @@ class MarkdownParser:
             self._handle_inline_formatting(line)
             i += 1
 
-    def _handle_code_block(self, lines, start_idx):
-        """Handle fenced code blocks"""
+    def _handle_code_block(self, lines: list[str], start_idx: int) -> int:
+        """
+        Handle fenced code blocks
+
+        Args:
+            lines: All lines in the document
+            start_idx: Index of opening ```
+
+        Returns:
+            Index after closing ```
+        """
         start_idx += 1  # Skip opening ```
         code_lines = []
 
@@ -60,8 +82,13 @@ class MarkdownParser:
 
         return i + 1  # Skip closing ```
 
-    def _handle_header(self, line):
-        """Handle header lines"""
+    def _handle_header(self, line: str) -> None:
+        """
+        Handle header lines
+
+        Args:
+            line: Header line (e.g. "## Title")
+        """
         match = re.match(r"^(#{1,3})\s+(.+)$", line)
         if not match:
             self._insert_text(line + "\n")
@@ -74,16 +101,26 @@ class MarkdownParser:
         end_iter = self.buffer.get_end_iter()
         self.buffer.insert_with_tags_by_name(end_iter, text + "\n", tag_name)
 
-    def _handle_list_item(self, line):
-        """Handle list items"""
+    def _handle_list_item(self, line: str) -> None:
+        """
+        Handle list items
+
+        Args:
+            line: List item line (e.g. "- Item")
+        """
         # Remove bullet and clean up
         text = re.sub(r"^[\s]*[-*+]\s+", "• ", line)
 
         end_iter = self.buffer.get_end_iter()
         self.buffer.insert_with_tags_by_name(end_iter, text + "\n", "list")
 
-    def _handle_inline_formatting(self, line):
-        """Handle inline formatting (bold, italic, code)"""
+    def _handle_inline_formatting(self, line: str) -> None:
+        """
+        Handle inline formatting (bold, italic, code)
+
+        Args:
+            line: Line with potential inline formatting
+        """
         if not line.strip():
             self._insert_text("\n")
             return
@@ -123,12 +160,23 @@ class MarkdownParser:
         # End of line
         self._insert_text("\n")
 
-    def _insert_text(self, text):
-        """Insert plain text"""
+    def _insert_text(self, text: str) -> None:
+        """
+        Insert plain text
+
+        Args:
+            text: Text to insert
+        """
         end_iter = self.buffer.get_end_iter()
         self.buffer.insert(end_iter, text)
 
-    def _insert_tagged_text(self, text, tag_name):
-        """Insert text with a specific tag"""
+    def _insert_tagged_text(self, text: str, tag_name: str) -> None:
+        """
+        Insert text with a specific tag
+
+        Args:
+            text: Text to insert
+            tag_name: Name of the tag to apply
+        """
         end_iter = self.buffer.get_end_iter()
         self.buffer.insert_with_tags_by_name(end_iter, text, tag_name)

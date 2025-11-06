@@ -1,6 +1,8 @@
 # ruff: noqa: E402
 """Startup manager for ensuring daemon is ready"""
 
+from __future__ import annotations
+
 import logging
 import subprocess
 import threading
@@ -13,11 +15,24 @@ from gi.repository import GLib, Gtk
 
 logger = logging.getLogger(__name__)
 
+# Startup Constants
+STARTUP_DIALOG_WIDTH = 300
+STARTUP_DIALOG_HEIGHT = 150
+SPINNER_SIZE = 32
+MARGIN = 20
+MAX_ERROR_LENGTH = 500
+
+# Timeout Constants (seconds)
+DEFAULT_MAX_WAIT_S = 30
+DAEMON_READY_WAIT_S = 10
+POLL_INTERVAL_S = 0.5
+MAIN_LOOP_SLEEP_S = 0.05
+
 
 class StartupDialog(Gtk.Window):
     """Simple startup dialog with spinner"""
 
-    def __init__(self, parent: Gtk.Window | None = None):
+    def __init__(self, parent: Gtk.Window | None = None) -> None:
         super().__init__()
         self.set_title("Starting AI Chat")
 
@@ -26,20 +41,20 @@ class StartupDialog(Gtk.Window):
             self.set_transient_for(parent)
             self.set_modal(True)
 
-        self.set_default_size(300, 150)
+        self.set_default_size(STARTUP_DIALOG_WIDTH, STARTUP_DIALOG_HEIGHT)
         self.set_resizable(False)
 
         # Layout
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=12)
-        box.set_margin_top(20)
-        box.set_margin_bottom(20)
-        box.set_margin_start(20)
-        box.set_margin_end(20)
+        box.set_margin_top(MARGIN)
+        box.set_margin_bottom(MARGIN)
+        box.set_margin_start(MARGIN)
+        box.set_margin_end(MARGIN)
 
         # Spinner
         spinner = Gtk.Spinner()
         spinner.start()
-        spinner.set_size_request(32, 32)
+        spinner.set_size_request(SPINNER_SIZE, SPINNER_SIZE)
         box.append(spinner)
 
         # Status label
@@ -51,7 +66,7 @@ class StartupDialog(Gtk.Window):
 
         self.set_child(box)
 
-    def set_status(self, message: str):
+    def set_status(self, message: str) -> None:
         """Update status message"""
         self.status_label.set_text(message)
 
@@ -59,9 +74,9 @@ class StartupDialog(Gtk.Window):
 class StartupManager:
     """Ensures daemon is running before UI starts"""
 
-    def __init__(self, daemon_client):
+    def __init__(self, daemon_client: object) -> None:
         self.daemon_client = daemon_client
-        self.max_wait_seconds = 30
+        self.max_wait_seconds = DEFAULT_MAX_WAIT_S
         self.cli_error = ""
 
     def ensure_daemon_ready(self, parent_window: Gtk.Window | None = None) -> bool:
@@ -70,7 +85,11 @@ class StartupManager:
 
         Must be called from the main thread.
 
-        Returns True if daemon is ready, False if failed to start
+        Args:
+            parent_window: Optional parent window for dialog
+
+        Returns:
+            True if daemon is ready, False if failed to start
         """
         # Check if already running
         if self.daemon_client.is_running():
@@ -85,7 +104,7 @@ class StartupManager:
         done = threading.Event()
         result = {"ok": False}
 
-        def worker():
+        def worker() -> None:
             ok = self._start_daemon_via_cli()
             if ok:
                 ok = self._wait_for_daemon_ready(dialog)
@@ -102,7 +121,7 @@ class StartupManager:
         while not done.is_set():
             while ctx.pending():
                 ctx.iteration(False)
-            time.sleep(0.05)  # Small sleep to avoid busy-waiting
+            time.sleep(MAIN_LOOP_SLEEP_S)  # Small sleep to avoid busy-waiting
 
         return result["ok"]
 
@@ -120,16 +139,16 @@ class StartupManager:
             if result.returncode == 0:
                 logger.info("✓ CLI reported daemon started")
                 return True
-            else:
-                # Combine stderr and stdout for full error context
-                parts = []
-                if result.stderr:
-                    parts.append(result.stderr.strip())
-                if result.stdout:
-                    parts.append(result.stdout.strip())
-                self.cli_error = "\n".join(parts)
-                logger.error(f"✗ Daemon start failed:\n{self.cli_error}")
-                return False
+
+            # Combine stderr and stdout for full error context
+            parts = []
+            if result.stderr:
+                parts.append(result.stderr.strip())
+            if result.stdout:
+                parts.append(result.stdout.strip())
+            self.cli_error = "\n".join(parts)
+            logger.error(f"✗ Daemon start failed:\n{self.cli_error}")
+            return False
 
         except subprocess.TimeoutExpired:
             error = f"Daemon start timed out after {self.max_wait_seconds}s"
@@ -152,7 +171,7 @@ class StartupManager:
         start_time = time.time()
         attempt = 0
 
-        while time.time() - start_time < 10:  # Extra 10s for safety
+        while time.time() - start_time < DAEMON_READY_WAIT_S:
             attempt += 1
 
             # Update dialog on main thread
@@ -162,13 +181,15 @@ class StartupManager:
                 logger.info(f"✓ Daemon ready after {attempt} attempts")
                 return True
 
-            time.sleep(0.5)
+            time.sleep(POLL_INTERVAL_S)
 
         logger.error("✗ Daemon not ready after polling")
         self.cli_error = "Daemon started but did not become healthy in time"
         return False
 
-    def _on_startup_complete(self, dialog: StartupDialog, success: bool, parent: Gtk.Window | None):
+    def _on_startup_complete(
+        self, dialog: StartupDialog, success: bool, parent: Gtk.Window | None
+    ) -> bool:
         """Called on main thread when startup completes"""
         dialog.close()
 
@@ -177,13 +198,13 @@ class StartupManager:
 
         return False  # Don't repeat this idle callback
 
-    def _show_error_dialog(self, parent: Gtk.Window | None):
+    def _show_error_dialog(self, parent: Gtk.Window | None) -> None:
         """Show error dialog if daemon failed to start"""
         error_detail = self.cli_error or "Unknown error"
 
         # Truncate if too long
-        if len(error_detail) > 500:
-            error_detail = error_detail[:500] + "..."
+        if len(error_detail) > MAX_ERROR_LENGTH:
+            error_detail = error_detail[:MAX_ERROR_LENGTH] + "..."
 
         dialog = Gtk.MessageDialog(
             transient_for=parent,
@@ -200,7 +221,7 @@ class StartupManager:
             f"Then restart the application."
         )
 
-        def on_response(d, response_id):
+        def on_response(d: Gtk.MessageDialog, response_id: int) -> bool:
             d.close()
             return False  # Don't repeat
 

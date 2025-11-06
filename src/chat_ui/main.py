@@ -1,6 +1,8 @@
 # ruff: noqa: E402
 """Main entry point for AI Chat UI"""
 
+from __future__ import annotations
+
 import logging
 import sys
 
@@ -23,9 +25,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-def main():
+def main() -> None:
     """Main entry point for AI Chat UI"""
-
     logger.info("Starting AI Chat UI v2.0.0")
 
     # Create daemon client
@@ -43,13 +44,13 @@ def main():
     # Create GTK application
     app = Gtk.Application(application_id=APP_ID, flags=Gio.ApplicationFlags.FLAGS_NONE)
 
-    def on_activate(application):
+    def on_activate(application: Gtk.Application) -> None:
         """Create and show main window"""
         window = ChatWindow(application=application, daemon_client=daemon_client)
         window.present()
         logger.info("Main window presented")
 
-    def on_shutdown(application):
+    def on_shutdown(application: Gtk.Application) -> None:
         """Cleanup on application shutdown"""
         logger.info("Application shutting down")
         # Close daemon client session

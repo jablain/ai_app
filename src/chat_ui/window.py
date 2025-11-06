@@ -1,8 +1,12 @@
 # ruff: noqa: E402
 """Main window for AI Chat UI"""
 
+from __future__ import annotations
+
 import logging
+import subprocess
 import threading
+from typing import Any
 
 import gi
 
@@ -16,15 +20,34 @@ from chat_ui.stats_display import StatsDisplay
 
 logger = logging.getLogger(__name__)
 
+# UI Constants
+SIDEBAR_WIDTH = 200
+STATS_PANEL_WIDTH = 250
+INPUT_HEIGHT = 80
+MARGIN_SMALL = 6
+MARGIN_MEDIUM = 12
+SPACING_SMALL = 4
+SPACING_MEDIUM = 6
+
+# Timeout Constants (seconds)
+REFRESH_INTERVAL_S = 3
+SEND_TIMEOUT_S = 120
+DAEMON_STOP_TIMEOUT_S = 10
+
+# Context Warning Thresholds (percent)
+DEFAULT_YELLOW_THRESHOLD = 70
+DEFAULT_ORANGE_THRESHOLD = 85
+DEFAULT_RED_THRESHOLD = 95
+
 
 class ChatWindow(Gtk.ApplicationWindow):
     """Main application window for AI Chat"""
 
-    def __init__(self, application, daemon_client: CLIWrapper):
+    def __init__(self, application: Gtk.Application, daemon_client: CLIWrapper) -> None:
         super().__init__(application=application)
         self.daemon_client = daemon_client
         self.current_ai = "claude"  # Default AI
-        self._refresh_timeout_id = None
+        self._refresh_timeout_id: int | None = None
         self._ai_change_guard = False  # Prevent double-refresh on AI change
 
         self.set_title("AI Chat")
@@ -42,15 +65,35 @@ class ChatWindow(Gtk.ApplicationWindow):
         # Initial chat list load (in background)
         threading.Thread(target=self._load_chats_thread, daemon=True).start()
 
-        # Start periodic refresh (every 3 seconds)
+        # Start periodic refresh
         self._start_periodic_refresh()
 
-    def _build_ui(self):
+    def _build_ui(self) -> None:
         """Build the GTK4 interface"""
-        # Main layout
         main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=0)
 
         # Header bar with AI selector
+        self._build_header_bar()
+
+        # Content area (chat list + response + stats)
+        content_box = self._build_content_area()
+        main_box.append(content_box)
+
+        # Input area
+        input_box = self._build_input_area()
+        main_box.append(input_box)
+
+        # Status bar
+        self.status_label = self._build_status_bar()
+        main_box.append(self.status_label)
+
+        self.set_child(main_box)
+
+        # Set focus to input view so user can type immediately
+        self.input_view.grab_focus()
+
+    def _build_header_bar(self) -> None:
+        """Build header bar with AI selector"""
         header = Gtk.HeaderBar()
 
         # AI selector (GTK4 DropDown with StringList)
@@ -61,19 +104,57 @@ class ChatWindow(Gtk.ApplicationWindow):
 
         self.set_titlebar(header)
 
-        # Content area (chat list + response + stats)
-        content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
-        content_box.set_margin_top(12)
-        content_box.set_margin_bottom(12)
-        content_box.set_margin_start(12)
-        content_box.set_margin_end(12)
+    def _build_content_area(self) -> Gtk.Box:
+        """Build the main content area with chat list, response display, and stats"""
+        content_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=MARGIN_MEDIUM)
+        content_box.set_margin_top(MARGIN_MEDIUM)
+        content_box.set_margin_bottom(MARGIN_MEDIUM)
+        content_box.set_margin_start(MARGIN_MEDIUM)
+        content_box.set_margin_end(MARGIN_MEDIUM)
 
         # Chat list sidebar
-        chat_sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
-        chat_sidebar.set_size_request(200, -1)
+        chat_sidebar = self._build_chat_sidebar()
+        content_box.append(chat_sidebar)
+
+        # Response display
+        self.response_display = ResponseDisplay()
+        self.response_display.set_hexpand(True)
+        content_box.append(self.response_display.get_widget())
+
+        # Stats display
+        self.stats_display = StatsDisplay()
+        self.stats_display.set_size_request(STATS_PANEL_WIDTH, -1)
+        content_box.append(self.stats_display.get_widget())
+
+        return content_box
+
+    def _build_chat_sidebar(self) -> Gtk.Box:
+        """Build the chat list sidebar with header and list"""
+        chat_sidebar = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=SPACING_MEDIUM)
+        chat_sidebar.set_size_request(SIDEBAR_WIDTH, -1)
 
         # Chat list header with buttons
-        chat_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        chat_header = self._build_chat_header()
+        chat_sidebar.append(chat_header)
+
+        # Chat list in scrolled window
+        chat_scroll = Gtk.ScrolledWindow()
+        chat_scroll.set_vexpand(True)
+        chat_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
+
+        self.chat_listbox = Gtk.ListBox()
+        self.chat_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
+        self.chat_listbox.connect("row-activated", self._on_chat_selected)
+        chat_scroll.set_child(self.chat_listbox)
+
+        chat_sidebar.append(chat_scroll)
+
+        return chat_sidebar
+
+    def _build_chat_header(self) -> Gtk.Box:
+        """Build the chat header with label and buttons"""
+        chat_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=SPACING_SMALL)
+
         chat_label = Gtk.Label(label="Chats")
         chat_label.set_hexpand(True)
         chat_label.set_halign(Gtk.Align.START)
@@ -91,52 +172,28 @@ class ChatWindow(Gtk.ApplicationWindow):
         refresh_btn.set_tooltip_text("Refresh Chat List")
         chat_header.append(refresh_btn)
 
-        chat_sidebar.append(chat_header)
+        return chat_header
 
-        # Chat list in scrolled window
-        chat_scroll = Gtk.ScrolledWindow()
-        chat_scroll.set_vexpand(True)
-        chat_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
-
-        self.chat_listbox = Gtk.ListBox()
-        self.chat_listbox.set_selection_mode(Gtk.SelectionMode.SINGLE)
-        self.chat_listbox.connect("row-activated", self._on_chat_selected)
-        chat_scroll.set_child(self.chat_listbox)
-
-        chat_sidebar.append(chat_scroll)
-        content_box.append(chat_sidebar)
-
-        # Response display
-        self.response_display = ResponseDisplay()
-        self.response_display.set_hexpand(True)
-        content_box.append(self.response_display.get_widget())
-
-        # Stats display
-        self.stats_display = StatsDisplay()
-        self.stats_display.set_size_request(250, -1)
-        content_box.append(self.stats_display.get_widget())
-
-        main_box.append(content_box)
-
-        # Input area
-        input_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+    def _build_input_area(self) -> Gtk.Box:
+        """Build the input text area with send button"""
+        input_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=SPACING_MEDIUM)
         input_box.set_margin_top(0)
-        input_box.set_margin_bottom(12)
-        input_box.set_margin_start(12)
-        input_box.set_margin_end(12)
+        input_box.set_margin_bottom(MARGIN_MEDIUM)
+        input_box.set_margin_start(MARGIN_MEDIUM)
+        input_box.set_margin_end(MARGIN_MEDIUM)
 
         # Input text view in scrolled window
         scroll = Gtk.ScrolledWindow()
-        scroll.set_size_request(-1, 80)
+        scroll.set_size_request(-1, INPUT_HEIGHT)
         scroll.set_hexpand(True)
         scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.AUTOMATIC)
 
         self.input_view = Gtk.TextView()
         self.input_view.set_wrap_mode(Gtk.WrapMode.WORD)
-        self.input_view.set_left_margin(6)
-        self.input_view.set_right_margin(6)
-        self.input_view.set_top_margin(6)
-        self.input_view.set_bottom_margin(6)
+        self.input_view.set_left_margin(MARGIN_SMALL)
+        self.input_view.set_right_margin(MARGIN_SMALL)
+        self.input_view.set_top_margin(MARGIN_SMALL)
+        self.input_view.set_bottom_margin(MARGIN_SMALL)
         scroll.set_child(self.input_view)
         input_box.append(scroll)
 
@@ -146,21 +203,17 @@ class ChatWindow(Gtk.ApplicationWindow):
         self.send_button.set_valign(Gtk.Align.END)
         input_box.append(self.send_button)
 
-        main_box.append(input_box)
+        return input_box
 
-        # Status bar
-        self.status_label = Gtk.Label(label="Ready")
-        self.status_label.set_halign(Gtk.Align.START)
-        self.status_label.set_margin_start(12)
-        self.status_label.set_margin_bottom(6)
-        main_box.append(self.status_label)
+    def _build_status_bar(self) -> Gtk.Label:
+        """Build the status bar at the bottom"""
+        status_label = Gtk.Label(label="Ready")
+        status_label.set_halign(Gtk.Align.START)
+        status_label.set_margin_start(MARGIN_MEDIUM)
+        status_label.set_margin_bottom(MARGIN_SMALL)
+        return status_label
 
-        self.set_child(main_box)
-
-        # FIX 1: Set focus to input view so user can type immediately
-        self.input_view.grab_focus()
-
-    def _load_available_ais(self):
+    def _load_available_ais(self) -> None:
         """Populate AI dropdown from daemon (with fallback)"""
         ais = self.daemon_client.get_available_ais()
         logger.info(f"Loading available AIs: {ais}")
@@ -189,7 +242,7 @@ class ChatWindow(Gtk.ApplicationWindow):
         # Release guard
         self._ai_change_guard = False
 
-    def _on_ai_changed(self, dropdown, _param):
+    def _on_ai_changed(self, dropdown: Gtk.DropDown, _param: Any) -> None:
         """Handle AI selection change"""
         # Prevent double-refresh during dropdown rebuild
         if self._ai_change_guard:
@@ -210,7 +263,7 @@ class ChatWindow(Gtk.ApplicationWindow):
             # Refresh chat list for new AI
             threading.Thread(target=self._load_chats_thread, daemon=True).start()
 
-    def _extract_ai_fields(self, ai_json: dict) -> dict:
+    def _extract_ai_fields(self, ai_json: dict[str, Any]) -> dict[str, Any]:
         """
         Extract fields from AI status JSON with robust fallbacks
 
@@ -241,7 +294,7 @@ class ChatWindow(Gtk.ApplicationWindow):
             "cdp_source": ai_json.get("cdp_source") or "",
         }
 
-    def _refresh_status_thread(self):
+    def _refresh_status_thread(self) -> None:
         """Refresh status in background thread, update UI via idle_add"""
         try:
             status = self.daemon_client.get_status()
@@ -270,7 +323,9 @@ class ChatWindow(Gtk.ApplicationWindow):
             logger.exception("Error refreshing status")
             GLib.idle_add(self._render_status_error, str(e))
 
-    def _render_stats(self, fields: dict, daemon_info: dict, ai_status: dict):
+    def _render_stats(
+        self, fields: dict[str, Any], daemon_info: dict[str, Any], ai_status: dict[str, Any]
+    ) -> bool:
         """
         Render stats to display (runs on main thread)
 
@@ -278,6 +333,9 @@ class ChatWindow(Gtk.ApplicationWindow):
             fields: Extracted AI fields
             daemon_info: Daemon info dict
             ai_status: Full AI status dict from daemon
+
+        Returns:
+            False to not repeat this idle callback
         """
         # Determine connection status
         cdp_healthy = daemon_info.get("cdp_healthy", False)
@@ -307,23 +365,24 @@ class ChatWindow(Gtk.ApplicationWindow):
         }
 
         # Add performance metrics from AI status (if available)
-        if "last_response_time_ms" in ai_status:
-            metadata["last_response_time_ms"] = ai_status["last_response_time_ms"]
-        if "tokens_per_sec" in ai_status:
-            metadata["tokens_per_sec"] = ai_status["tokens_per_sec"]
-        if "avg_response_time_ms" in ai_status:
-            metadata["avg_response_time_ms"] = ai_status["avg_response_time_ms"]
-        if "avg_tokens_per_sec" in ai_status:
-            metadata["avg_tokens_per_sec"] = ai_status["avg_tokens_per_sec"]
+        performance_keys = [
+            "last_response_time_ms",
+            "tokens_per_sec",
+            "avg_response_time_ms",
+            "avg_tokens_per_sec",
+        ]
+        for key in performance_keys:
+            if key in ai_status:
+                metadata[key] = ai_status[key]
 
         # Update context warning thresholds from daemon config (if available)
         thresholds = daemon_info.get("context_warning_thresholds", {})
         if thresholds:
             logger.debug(f"Updating context warning thresholds: {thresholds}")
             self.stats_display.set_context_warning_thresholds(
-                yellow=thresholds.get("yellow", 70),
-                orange=thresholds.get("orange", 85),
-                red=thresholds.get("red", 95),
+                yellow=thresholds.get("yellow", DEFAULT_YELLOW_THRESHOLD),
+                orange=thresholds.get("orange", DEFAULT_ORANGE_THRESHOLD),
+                red=thresholds.get("red", DEFAULT_RED_THRESHOLD),
             )
         else:
             logger.warning("No context_warning_thresholds in daemon status response")
@@ -331,39 +390,38 @@ class ChatWindow(Gtk.ApplicationWindow):
         self.stats_display.update_from_metadata(metadata)
 
         logger.debug(
-            f"Stats updated for {self.current_ai}: {fields['turns']} turns, {fields['tokens_total']} tokens"
+            f"Stats updated for {self.current_ai}: {fields['turns']} turns, "
+            f"{fields['tokens_total']} tokens"
         )
 
         return False  # Don't repeat this idle callback
 
-    def _render_ai_unavailable(self, daemon_info: dict):
+    def _render_ai_unavailable(self, daemon_info: dict[str, Any]) -> bool:
         """Render unavailable state (runs on main thread)"""
         self.status_label.set_text(f"{self.current_ai} not available")
         self.stats_display.clear()
         logger.warning(f"AI {self.current_ai} not found in daemon status")
-
         return False  # Don't repeat
 
-    def _render_status_error(self, error: str):
+    def _render_status_error(self, error: str) -> bool:
         """Render error state (runs on main thread)"""
         self.status_label.set_text(f"Status error: {error}")
         logger.error(f"Status refresh error: {error}")
-
         return False  # Don't repeat
 
-    def _start_periodic_refresh(self):
-        """Start periodic status refresh (every 3 seconds)"""
+    def _start_periodic_refresh(self) -> None:
+        """Start periodic status refresh"""
 
-        def refresh_callback():
+        def refresh_callback() -> bool:
             # GTK4-correct visibility check
             if self.get_visible():
                 threading.Thread(target=self._refresh_status_thread, daemon=True).start()
             return True  # Continue repeating
 
-        self._refresh_timeout_id = GLib.timeout_add_seconds(3, refresh_callback)
-        logger.debug("Started periodic status refresh (3s interval)")
+        self._refresh_timeout_id = GLib.timeout_add_seconds(REFRESH_INTERVAL_S, refresh_callback)
+        logger.debug(f"Started periodic status refresh ({REFRESH_INTERVAL_S}s interval)")
 
-    def _stop_periodic_refresh(self):
+    def _stop_periodic_refresh(self) -> None:
         """Stop periodic refresh"""
         if self._refresh_timeout_id:
             GLib.source_remove(self._refresh_timeout_id)
@@ -377,12 +435,12 @@ class ChatWindow(Gtk.ApplicationWindow):
         end = buffer.get_end_iter()
         return buffer.get_text(start, end, False)
 
-    def _clear_input(self):
+    def _clear_input(self) -> None:
         """Clear input text view"""
         buffer = self.input_view.get_buffer()
         buffer.set_text("")
 
-    def _on_send_clicked(self, button):
+    def _on_send_clicked(self, button: Gtk.Button) -> None:
         """Handle send button click"""
         prompt = self._get_input_text()
 
@@ -408,11 +466,14 @@ class ChatWindow(Gtk.ApplicationWindow):
         thread = threading.Thread(target=self._send_message_thread, args=(prompt,), daemon=True)
         thread.start()
 
-    def _send_message_thread(self, prompt: str):
+    def _send_message_thread(self, prompt: str) -> None:
         """Background thread to send message (don't block UI)"""
         try:
             response = self.daemon_client.send_prompt(
-                ai=self.current_ai, prompt=prompt, wait_for_response=True, timeout_s=120
+                ai=self.current_ai,
+                prompt=prompt,
+                wait_for_response=True,
+                timeout_s=SEND_TIMEOUT_S,
             )
 
             # Update UI on main thread
@@ -422,7 +483,7 @@ class ChatWindow(Gtk.ApplicationWindow):
             logger.exception("Error in send thread")
             GLib.idle_add(self._handle_error, str(e))
 
-    def _handle_response(self, response: SendResponse):
+    def _handle_response(self, response: SendResponse) -> bool:
         """Handle successful response (runs on main thread)"""
         self.send_button.set_sensitive(True)
 
@@ -441,12 +502,12 @@ class ChatWindow(Gtk.ApplicationWindow):
             threading.Thread(target=self._refresh_status_thread, daemon=True).start()
 
             # Show elapsed time if available
+            elapsed_ms = None
             if response.metadata:
                 elapsed_ms = stats_helper.extract_elapsed_ms(response.metadata)
-                if elapsed_ms:
-                    self.status_label.set_text(f"✓ Complete ({elapsed_ms}ms)")
-                else:
-                    self.status_label.set_text("✓ Complete")
+
+            if elapsed_ms:
+                self.status_label.set_text(f"✓ Complete ({elapsed_ms}ms)")
             else:
                 self.status_label.set_text("✓ Complete")
         else:
@@ -454,63 +515,98 @@ class ChatWindow(Gtk.ApplicationWindow):
             error_msg = response.error or "Unknown error"
             self.status_label.set_text(f"✗ {error_msg}")
 
-    def _load_chats(self):
-        """Load chat list for current AI"""
+        return False  # Don't repeat this idle callback
+
+    def _load_chats_thread(self) -> None:
+        """Load chats in background thread and update UI"""
         try:
             chats = self.daemon_client.list_chats(self.current_ai)
-            
+            GLib.idle_add(self._update_chat_list, chats)
+        except Exception as e:
+            logger.error(f"Failed to load chats in thread: {e}")
+
+    def _update_chat_list(self, chats: list[dict[str, Any]]) -> bool:
+        """
+        Update chat list in UI (must be called from main thread)
+
+        Args:
+            chats: List of chat dictionaries
+
+        Returns:
+            False to not repeat this idle callback
+        """
+        try:
             # Clear current list
             while True:
                 row = self.chat_listbox.get_row_at_index(0)
                 if row is None:
                     break
                 self.chat_listbox.remove(row)
-            
+
             # Add chats to list and track current chat row
             current_row = None
             for chat in chats:
-                row = Gtk.ListBoxRow()
-                box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-                box.set_margin_start(6)
-                box.set_margin_end(6)
-                box.set_margin_top(4)
-                box.set_margin_bottom(4)
-                
-                # Title label
-                title = chat.get("title", "Untitled")
+                row = self._create_chat_row(chat)
+
+                # Track the current chat row
                 if chat.get("is_current"):
-                    title = "→ " + title
-                    current_row = row  # Track the current chat row
-                
-                label = Gtk.Label(label=title)
-                label.set_hexpand(True)
-                label.set_halign(Gtk.Align.START)
-                label.set_ellipsize(3)  # PANGO_ELLIPSIZE_END
-                box.append(label)
-                
-                row.set_child(box)
-                row.chat_data = chat  # Store chat data on row
+                    current_row = row
+
                 self.chat_listbox.append(row)
-            
+
             # Select the current chat row to highlight it
             if current_row:
                 self.chat_listbox.select_row(current_row)
             else:
                 # If no current chat, unselect all
                 self.chat_listbox.unselect_all()
-                
-            logger.debug(f"Loaded {len(chats)} chats for {self.current_ai}")
-        except Exception as e:
-            logger.error(f"Failed to load chats: {e}")
 
-    def _on_chat_selected(self, listbox, row):
+            logger.debug(f"Updated UI with {len(chats)} chats")
+        except Exception as e:
+            logger.error(f"Failed to update chat list: {e}")
+
+        return False  # Don't repeat this idle callback
+
+    def _create_chat_row(self, chat: dict[str, Any]) -> Gtk.ListBoxRow:
+        """
+        Create a chat list row widget
+
+        Args:
+            chat: Chat dictionary with title and metadata
+
+        Returns:
+            Configured ListBoxRow widget
+        """
+        row = Gtk.ListBoxRow()
+        box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=SPACING_SMALL)
+        box.set_margin_start(MARGIN_SMALL)
+        box.set_margin_end(MARGIN_SMALL)
+        box.set_margin_top(SPACING_SMALL)
+        box.set_margin_bottom(SPACING_SMALL)
+
+        # Title label
+        title = chat.get("title", "Untitled")
+        if chat.get("is_current"):
+            title = "→ " + title
+
+        label = Gtk.Label(label=title)
+        label.set_hexpand(True)
+        label.set_halign(Gtk.Align.START)
+        label.set_ellipsize(3)  # PANGO_ELLIPSIZE_END
+        box.append(label)
+
+        row.set_child(box)
+        row.chat_data = chat  # Store chat data on row
+        return row
+
+    def _on_chat_selected(self, listbox: Gtk.ListBox, row: Gtk.ListBoxRow) -> None:
         """Handle chat selection"""
         if not row or not hasattr(row, "chat_data"):
             return
-        
+
         chat = row.chat_data
         chat_id = chat.get("chat_id")
-        
+
         if chat_id:
             logger.info(f"Switching to chat: {chat_id}")
             success = self.daemon_client.switch_chat(self.current_ai, chat_id)
@@ -521,7 +617,7 @@ class ChatWindow(Gtk.ApplicationWindow):
             else:
                 self.status_label.set_text("✗ Failed to switch chat")
 
-    def _on_new_chat_clicked(self, button):
+    def _on_new_chat_clicked(self, button: Gtk.Button) -> None:
         """Handle new chat button click"""
         logger.info("Creating new chat")
         success = self.daemon_client.new_chat(self.current_ai)
@@ -532,80 +628,20 @@ class ChatWindow(Gtk.ApplicationWindow):
         else:
             self.status_label.set_text("✗ Failed to create new chat")
 
-    def _on_refresh_chats_clicked(self, button):
+    def _on_refresh_chats_clicked(self, button: Gtk.Button) -> None:
         """Handle refresh chats button click"""
         logger.info("Refreshing chat list")
         threading.Thread(target=self._load_chats_thread, daemon=True).start()
 
-
-
-    def _load_chats_thread(self):
-        """Load chats in background thread and update UI"""
-        try:
-            chats = self.daemon_client.list_chats(self.current_ai)
-            GLib.idle_add(self._update_chat_list, chats)
-        except Exception as e:
-            logger.error(f"Failed to load chats in thread: {e}")
-
-    def _update_chat_list(self, chats):
-        """Update chat list in UI (must be called from main thread)"""
-        try:
-            # Clear current list
-            while True:
-                row = self.chat_listbox.get_row_at_index(0)
-                if row is None:
-                    break
-                self.chat_listbox.remove(row)
-            
-            # Add chats to list and track current chat row
-            current_row = None
-            for chat in chats:
-                row = Gtk.ListBoxRow()
-                box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
-                box.set_margin_start(6)
-                box.set_margin_end(6)
-                box.set_margin_top(4)
-                box.set_margin_bottom(4)
-                
-                # Title label
-                title = chat.get("title", "Untitled")
-                if chat.get("is_current"):
-                    title = "→ " + title
-                    current_row = row  # Track the current chat row
-                
-                label = Gtk.Label(label=title)
-                label.set_hexpand(True)
-                label.set_halign(Gtk.Align.START)
-                label.set_ellipsize(3)  # PANGO_ELLIPSIZE_END
-                box.append(label)
-                
-                row.set_child(box)
-                row.chat_data = chat  # Store chat data on row
-                self.chat_listbox.append(row)
-            
-            # Select the current chat row to highlight it
-            if current_row:
-                self.chat_listbox.select_row(current_row)
-            else:
-                # If no current chat, unselect all
-                self.chat_listbox.unselect_all()
-                
-            logger.debug(f"Updated UI with {len(chats)} chats")
-        except Exception as e:
-            logger.error(f"Failed to update chat list: {e}")
-
-        return False  # Don't repeat this idle callback
-
-    def _handle_error(self, error: str):
+    def _handle_error(self, error: str) -> bool:
         """Handle error (runs on main thread)"""
         self.send_button.set_sensitive(True)
         self.status_label.set_text(f"✗ Error: {error}")
         self.response_display.set_text(f"Error: {error}")
         logger.error(f"Send error: {error}")
-
         return False  # Don't repeat this idle callback
 
-    def do_close_request(self):
+    def do_close_request(self) -> bool:
         """Handle window close - stop daemon and CDP"""
         # Stop periodic refresh
         self._stop_periodic_refresh()
@@ -614,17 +650,18 @@ class ChatWindow(Gtk.ApplicationWindow):
 
         # Stop the daemon (which should also stop CDP)
         try:
-            import subprocess
-
             result = subprocess.run(
-                ["ai-cli-bridge", "daemon", "stop"], capture_output=True, text=True, timeout=10
+                ["ai-cli-bridge", "daemon", "stop"],
+                capture_output=True,
+                text=True,
+                timeout=DAEMON_STOP_TIMEOUT_S,
             )
             if result.returncode == 0:
                 logger.info("✓ Daemon stopped successfully")
             else:
                 logger.warning(f"Daemon stop returned non-zero: {result.stderr}")
         except subprocess.TimeoutExpired:
-            logger.error("Daemon stop timed out after 10 seconds")
+            logger.error(f"Daemon stop timed out after {DAEMON_STOP_TIMEOUT_S} seconds")
         except Exception as e:
             logger.error(f"Failed to stop daemon: {e}")
 
