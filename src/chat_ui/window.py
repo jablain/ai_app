@@ -258,6 +258,8 @@ class ChatWindow(Gtk.ApplicationWindow):
         if ai and ai != self.current_ai:
             self.current_ai = ai
             logger.info(f"Switched to AI: {self.current_ai}")
+            # Clear response display to avoid showing stale content
+            self.response_display.clear()
             # Refresh stats for new AI (in background)
             threading.Thread(target=self._refresh_status_thread, daemon=True).start()
             # Refresh chat list for new AI
@@ -611,6 +613,8 @@ class ChatWindow(Gtk.ApplicationWindow):
             logger.info(f"Switching to chat: {chat_id}")
             success = self.daemon_client.switch_chat(self.current_ai, chat_id)
             if success:
+                # Clear response display to avoid showing stale content
+                self.response_display.clear()
                 self.status_label.set_text(f"✓ Switched to: {chat.get('title', 'chat')}")
                 # Reload chat list to update current indicator
                 threading.Thread(target=self._load_chats_thread, daemon=True).start()
@@ -622,6 +626,8 @@ class ChatWindow(Gtk.ApplicationWindow):
         logger.info("Creating new chat")
         success = self.daemon_client.new_chat(self.current_ai)
         if success:
+            # Clear response display for new chat
+            self.response_display.clear()
             self.status_label.set_text("✓ New chat created")
             # Reload chat list
             threading.Thread(target=self._load_chats_thread, daemon=True).start()

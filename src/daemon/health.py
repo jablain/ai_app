@@ -8,6 +8,7 @@ import time
 
 logger = logging.getLogger(__name__)
 
+
 class HealthMonitor:
     """
     Monitors CDP connection health in the background.

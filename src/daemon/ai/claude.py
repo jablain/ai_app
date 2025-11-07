@@ -56,10 +56,10 @@ class ClaudeAI(BaseAI):
                 "chat_sidebar": "ul",  # The <ul> containing chat list items
                 "chat_item": "a[href^='/chat/']",  # Links to chat pages
                 "chat_title": "span.truncate",  # Title text within chat item
-             },
-             # Additional Claude-specific settings
-             "snippet_length": 280,
-         }
+            },
+            # Additional Claude-specific settings
+            "snippet_length": 280,
+        }
 
 
 # Register this adapter with the factory under the key 'claude'

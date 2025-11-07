@@ -42,9 +42,7 @@ def _make_request(host: str, port: int, endpoint: str, payload: dict) -> dict:
         resp.raise_for_status()
         return resp.json()
     except requests.exceptions.ConnectionError as e:
-        raise DaemonNotRunning(
-            f"Cannot connect to daemon at {host}:{port}. Is it running?"
-        ) from e
+        raise DaemonNotRunning(f"Cannot connect to daemon at {host}:{port}. Is it running?") from e
 
 
 @app.command("list")
@@ -96,9 +94,7 @@ def switch_chat(
 ):
     """Switch to a specific chat."""
     try:
-        result = _make_request(
-            host, port, "/chats/switch", {"target": ai_name, "chat_id": chat_id}
-        )
+        result = _make_request(host, port, "/chats/switch", {"target": ai_name, "chat_id": chat_id})
 
         if result.get("success"):
             typer.secho(f"✓ Switched to chat: {chat_id}", fg=typer.colors.GREEN)
@@ -140,6 +136,3 @@ def new_chat(
     except Exception as e:
         typer.secho(f"Error: {e}", fg=typer.colors.RED)
         raise typer.Exit(1)
-
-
-

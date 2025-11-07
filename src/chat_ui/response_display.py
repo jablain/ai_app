@@ -108,6 +108,10 @@ class ResponseDisplay(Gtk.Box):
         # Auto-scroll to bottom
         self._scroll_to_bottom()
 
+    def clear(self) -> None:
+        """Clear the response display"""
+        self.buffer.set_text("")
+
     def _scroll_to_bottom(self) -> None:
         """Scroll text view to bottom (common in chat UIs)"""
         end_iter = self.buffer.get_end_iter()

@@ -57,10 +57,10 @@ class ChatGPTAI(BaseAI):
                 "chat_item": "#history a[href^='/c/']",
                 "chat_title": "span[dir='auto']",
                 "active_chat": "a[data-active]",
-             },
-             # Additional ChatGPT-specific settings
-             "snippet_length": 280,
-         }
+            },
+            # Additional ChatGPT-specific settings
+            "snippet_length": 280,
+        }
 
 
 # Register this adapter with the factory under the key 'chatgpt'
